@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.pytest_cache/
+
+# Database files
+data/*.db
+data/*.sqlite3
+data/*.db-wal
+data/*.db-shm
+!data/.gitkeep
+
+# Sandbox runtime directories (scratch execution spaces)
+sandboxes/*
+!sandboxes/.gitkeep
+
+# Environment & Logs
+*.log
+.env
+.vscode/
+.idea/
