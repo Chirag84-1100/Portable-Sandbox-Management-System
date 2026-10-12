@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Operational Dashboard{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h2>Welcome back, <span id="welcome-username">{{ session.get('username', 'User') }}</span></h2>
+      <p>Portable Sandbox Management System · WSL2 Process Supervisor</p>
+    </div>
+    <a href="{{ url_for('web.sandboxes_page') }}" class="btn btn-primary">+ New Sandbox</a>
+  </div>
+</div>
+
+<div id="dashboard-error" class="card" hidden>
+  Unable to load dashboard data. Please refresh the page.
+</div>
+
+<div class="grid grid-4"
+  style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem;">
+  <div class="card">
+    <p>Total Sandboxes</p>
+    <h2 id="total-sandboxes">—</h2>
+  </div>
+  <div class="card">
+    <p>Active Sandboxes</p>
+    <h2 id="active-sandboxes">—</h2>
+  </div>
+  <div class="card">
+    <p>CPU Usage</p>
+    <h2 id="cpu-usage">—</h2>
+  </div>
+  <div class="card">
+    <p>Memory Usage</p>
+    <h2 id="memory-usage">—</h2>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;">
+  <section class="card">
+    <h3>Recent Sandboxes</h3>
+    <div id="recent-sandboxes">
+      <p>Loading sandboxes...</p>
+    </div>
+    <a href="{{ url_for('web.sandboxes_page') }}" class="btn btn-outline" style="margin-top:1rem;">View All
+      Sandboxes</a>
+  </section>
+
+  <section class="card">
+    <h3>Recent Activity</h3>
+    <div id="recent-activity">
+      <p>Loading activity...</p>
+    </div>
+    <a href="{{ url_for('web.activity_page') }}" class="btn btn-outline" style="margin-top:1rem;">View Activity Logs</a>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    const showError = () => {
+      document.getElementById("dashboard-error").hidden = false;
+    };
+
+    const setText = (id, value) => {
+      document.getElementById(id).textContent = value;
+    };
+
+    const safeArray = value => Array.isArray(value) ? value : [];
+
+    try {
+      const results = await Promise.all([
+        api.get("/api/dashboard/summary"),
+        api.get("/api/system/stats"),
+        api.get("/api/sandboxes"),
+        api.get("/api/activity?limit=5")
+      ]);
+
+      const summary = results[0]?.data || {};
+      const stats = results[1]?.data || {};
+      const sandboxes = safeArray(results[2]?.data);
+      const activities = safeArray(results[3]?.data);
+
+      // Display the real summary returned by the backend.
+      const summaryCount = summary.total_sandboxes ?? summary.sandbox_count;
+      setText("total-sandboxes",
+        summaryCount ?? sandboxes.length);
+
+      const activeCount = summary.active_sandboxes ??
+        sandboxes.filter(s => s.is_active === 1 || s.is_active === true).length;
+      setText("active-sandboxes", activeCount);
+
+      const cpu = stats.cpu_percent ?? stats.cpu_usage_percent;
+      const memory = stats.memory_percent ?? stats.memory_usage_percent;
+      setText("cpu-usage", cpu == null ? "N/A" : `${Number(cpu).toFixed(1)}%`);
+      setText("memory-usage", memory == null ? "N/A" : `${Number(memory).toFixed(1)}%`);
+
+      const sandboxContainer = document.getElementById("recent-sandboxes");
+      sandboxContainer.replaceChildren();
+
+      if (sandboxes.length === 0) {
+        sandboxContainer.textContent = "No sandboxes created yet.";
+      } else {
+        sandboxes.slice(0, 5).forEach(sandbox => {
+          const item = document.createElement("div");
+          item.style.cssText = "padding:0.75rem 0;border-bottom:1px solid var(--border-color, #CBD5E1);";
+
+          const name = document.createElement("strong");
+          name.textContent = sandbox.name || `Sandbox ${sandbox.id}`;
+
+          const detail = document.createElement("p");
+          detail.textContent = sandbox.description || "No description";
+
+          item.append(name, detail);
+
+          if (sandbox.id != null) {
+            const link = document.createElement("a");
+            link.href = `/sandboxes/${encodeURIComponent(sandbox.id)}`;
+            link.textContent = "View details";
+            item.append(link);
+          }
+
+          sandboxContainer.append(item);
+        });
+      }
+
+      const activityContainer = document.getElementById("recent-activity");
+      activityContainer.replaceChildren();
+
+      if (activities.length === 0) {
+        activityContainer.textContent = "No recent activity.";
+      } else {
+        activities.forEach(activity => {
+          const item = document.createElement("div");
+          item.style.cssText = "padding:0.75rem 0;border-bottom:1px solid var(--border-color, #CBD5E1);";
+
+          const action = document.createElement("strong");
+          action.textContent = activity.action || "Activity";
+
+          const details = document.createElement("p");
+          details.textContent = activity.details || "";
+
+          item.append(action, details);
+          activityContainer.append(item);
+        });
+      }
+    } catch (error) {
+      console.error("Dashboard loading failed:", error);
+      showError();
+      document.getElementById("recent-sandboxes").textContent =
+        "Could not load sandbox data.";
+      document.getElementById("recent-activity").textContent =
+        "Could not load activity data.";
+    }
+  });
+</script>
+{% endblock %}

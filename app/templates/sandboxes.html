@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Sandboxes{% endblock %}
+{% block page_title %}Sandbox Workspaces{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h2>Sandboxes</h2>
+      <p>Manage isolated working directories and their lifecycle.</p>
+    </div>
+    <button class="btn btn-primary" id="show-create-form">+ New Sandbox</button>
+  </div>
+</div>
+
+<div class="card" id="create-panel" hidden style="margin-bottom:1.5rem;">
+  <h3>Create Sandbox</h3>
+  <form id="create-form">
+    <div style="margin:1rem 0;">
+      <label for="sandbox-name">Sandbox Name</label>
+      <input id="sandbox-name" name="name" type="text" required minlength="1" maxlength="80"
+        placeholder="e.g. Python Practice" style="width:100%;margin-top:.5rem;">
+    </div>
+    <div style="margin:1rem 0;">
+      <label for="sandbox-description">Description</label>
+      <textarea id="sandbox-description" name="description" rows="3" placeholder="What will you use this sandbox for?"
+        style="width:100%;margin-top:.5rem;"></textarea>
+    </div>
+    <button class="btn btn-primary" id="create-button" type="submit">Create Sandbox</button>
+    <button class="btn btn-outline" id="cancel-create" type="button">Cancel</button>
+  </form>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+    <h3>Your Workspaces</h3>
+    <button class="btn btn-outline" id="refresh-sandboxes" type="button">Refresh</button>
+  </div>
+  <p id="sandbox-message" role="status" style="margin:1rem 0;"></p>
+  <div id="sandbox-list">Loading sandboxes...</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const panel = document.getElementById("create-panel");
+    const form = document.getElementById("create-form");
+    const list = document.getElementById("sandbox-list");
+    const message = document.getElementById("sandbox-message");
+    const createButton = document.getElementById("create-button");
+
+    document.getElementById("show-create-form").addEventListener("click", () => {
+      panel.hidden = false;
+      document.getElementById("sandbox-name").focus();
+    });
+
+    document.getElementById("cancel-create").addEventListener("click", () => {
+      panel.hidden = true;
+      form.reset();
+      message.textContent = "";
+    });
+
+    function showMessage(text) {
+      message.textContent = text;
+    }
+
+    function makeElement(tag, text, className) {
+      const el = document.createElement(tag);
+      el.textContent = text ?? "";
+      if (className) el.className = className;
+      return el;
+    }
+
+    async function loadSandboxes() {
+      list.replaceChildren(makeElement("p", "Loading sandboxes..."));
+      try {
+        const response = await api.get("/api/sandboxes");
+        const sandboxes = Array.isArray(response?.data) ? response.data : [];
+        list.replaceChildren();
+
+        if (sandboxes.length === 0) {
+          list.append(makeElement("p", "No sandboxes yet. Create your first workspace."));
+          return;
+        }
+
+        sandboxes.forEach(sandbox => {
+          const card = document.createElement("article");
+          card.style.cssText = "padding:1rem 0;border-bottom:1px solid var(--border-color, #CBD5E1);";
+
+          const heading = makeElement("h3", sandbox.name || `Sandbox ${sandbox.id}`);
+          const description = makeElement("p", sandbox.description || "No description provided.");
+          const path = makeElement("p", `Working directory: ${sandbox.working_dir || "Not specified"}`);
+          path.style.cssText = "font-size:.85rem;color:var(--text-gray);overflow-wrap:anywhere;margin:.5rem 0;";
+
+          const actions = document.createElement("div");
+          actions.style.cssText = "display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem;";
+
+          const details = makeElement("a", "Open Details", "btn btn-outline");
+          details.href = `/sandboxes/${encodeURIComponent(sandbox.id)}`;
+
+          const remove = makeElement("button", "Delete", "btn btn-outline");
+          remove.type = "button";
+          remove.addEventListener("click", async () => {
+            if (!window.confirm(`Delete sandbox "${sandbox.name}"? Associated execution history may also be deleted.`)) return;
+            remove.disabled = true;
+            try {
+              await api.delete(`/api/sandboxes/${encodeURIComponent(sandbox.id)}`);
+              showMessage("Sandbox deleted.");
+              await loadSandboxes();
+            } catch (error) {
+              showMessage(error.message || "Could not delete sandbox.");
+              remove.disabled = false;
+            }
+          });
+
+          actions.append(details, remove);
+          card.append(heading, description, path, actions);
+          list.append(card);
+        });
+      } catch (error) {
+        list.replaceChildren(makeElement("p", "Could not load sandboxes. Try Refresh."));
+        showMessage(error.message || "Request failed.");
+      }
+    }
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      createButton.disabled = true;
+      showMessage("Creating sandbox...");
+
+      const payload = {
+        name: document.getElementById("sandbox-name").value.trim(),
+        description: document.getElementById("sandbox-description").value.trim()
+      };
+
+      try {
+        await api.post("/api/sandboxes", payload);
+        form.reset();
+        panel.hidden = true;
+        showMessage("Sandbox created successfully.");
+        await loadSandboxes();
+      } catch (error) {
+        showMessage(error.message || "Could not create sandbox.");
+      } finally {
+        createButton.disabled = false;
+      }
+    });
+
+    document.getElementById("refresh-sandboxes").addEventListener("click", loadSandboxes);
+    loadSandboxes();
+  });
+</script>
+{% endblock %}

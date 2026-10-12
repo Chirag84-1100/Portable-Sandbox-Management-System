@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account &mdash; Portable Sandbox Management System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">PS</div>
+        <h1>Create Account</h1>
+        <p>Join Portable Sandbox Management System</p>
+      </div>
+
+      <div id="auth-error-alert" class="auth-alert auth-alert-error" role="alert"></div>
+      <div id="auth-success-alert" class="auth-alert auth-alert-success" role="alert"></div>
+
+      <form id="register-form" autocomplete="off">
+        <div class="form-group">
+          <label for="username" class="form-label">Username</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="form-input"
+            placeholder="Choose a username (min. 3 characters)"
+            minlength="3"
+            required
+            autocomplete="username"
+            autofocus
+          >
+          <span class="form-help">Unique identifier for your sandboxes</span>
+        </div>
+
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="form-input"
+            placeholder="Choose a strong password (min. 6 characters)"
+            minlength="6"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="confirm_password" class="form-label">Confirm Password</label>
+          <input
+            type="password"
+            id="confirm_password"
+            name="confirm_password"
+            class="form-input"
+            placeholder="Re-enter your password"
+            minlength="6"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <button type="submit" id="register-submit-btn" class="btn btn-primary auth-submit-btn">
+          <span class="btn-text">Create Account</span>
+          <span class="spinner btn-spinner" style="display: none;"></span>
+        </button>
+      </form>
+
+      <div class="auth-security-notice">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <div>
+          <strong>Role Policy Notice:</strong> All public registrations are automatically provisioned with standard <code>user</code> role privileges in compliance with host sandbox security constraints.
+        </div>
+      </div>
+
+      <div class="auth-footer">
+        Already have an account? <a href="{{ url_for('web.login_page') }}" style="font-weight: 600;">Sign in</a>
+      </div>
+    </div>
+
+    <div class="auth-meta-footer">
+      B.Tech CSE/AIML Systems Capstone &bull; WSL2 Ubuntu Engine
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+</body>
+</html>

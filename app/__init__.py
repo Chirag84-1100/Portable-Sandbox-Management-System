@@ -25,6 +25,9 @@ def create_app(config_class: Optional[Type[Config]] = None) -> Flask:
     from app.api import api_bp
     app.register_blueprint(api_bp)
 
+    from app.web import web_bp
+    app.register_blueprint(web_bp)
+
     # Global JSON error handlers
     @app.errorhandler(400)
     def bad_request(error):

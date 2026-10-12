@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>{% block title %}Portable Sandbox{% endblock %}</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+  <!-- Load API before page-specific scripts -->
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+
+  {% block extra_css %}{% endblock %}
+
+  <style>
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #a855f7, #ec4899);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .brand-name {
+      font-size: 17px;
+      font-weight: 750;
+    }
+
+    .brand-subtitle {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: .7;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 20px 12px;
+    }
+
+    .sidebar-nav a {
+      text-decoration: none;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 16px;
+      border-radius: 12px;
+    }
+
+    .nav-link.active {
+      color: #a855f7;
+      background: rgba(168, 85, 247, .09);
+    }
+
+    .nav-icon {
+      width: 24px;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 20px;
+      border-top: 1px solid var(--border-color, #e5e7eb);
+    }
+
+    .user-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .user-name {
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .user-role {
+      display: inline-block;
+      margin-top: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      color: #a855f7;
+      background: rgba(168, 85, 247, .08);
+    }
+
+    .logout-link {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .mobile-menu-button {
+      display: none;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color, #ddd);
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .sidebar-overlay {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      .mobile-menu-button {
+        display: inline-flex;
+      }
+
+      .sidebar-overlay.visible {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 998;
+        background: rgba(0, 0, 0, .35);
+      }
+
+      .sidebar.mobile-open {
+        display: flex;
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(290px, 85vw);
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--sidebar-background, #fff);
+        box-shadow: 0 0 24px rgba(0, 0, 0, .12);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-layout">
+
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <aside id="app-sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon">PS</div>
+        <div>
+          <div class="brand-name">Portable Sandbox</div>
+          <div class="brand-subtitle">WSL2 Process Supervisor</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="{{ url_for('web.dashboard_page') }}"
+          class="nav-link {% if request.endpoint == 'web.dashboard_page' %}active{% endif %}">
+          <span class="nav-icon">D</span>
+          <span>Dashboard</span>
+        </a>
+
+        <a href="{{ url_for('web.sandboxes_page') }}"
+          class="nav-link {% if request.endpoint in ['web.sandboxes_page', 'web.sandbox_detail_page'] %}active{% endif %}">
+          <span class="nav-icon">S</span>
+          <span>Sandboxes</span>
+        </a>
+
+        <a href="{{ url_for('web.monitor_page') }}"
+          class="nav-link {% if request.endpoint == 'web.monitor_page' %}active{% endif %}">
+          <span class="nav-icon">M</span>
+          <span>Process Monitor</span>
+        </a>
+
+        <a href="{{ url_for('web.activity_page') }}"
+          class="nav-link {% if request.endpoint == 'web.activity_page' %}active{% endif %}">
+          <span class="nav-icon">L</span>
+          <span>Activity Logs</span>
+        </a>
+
+        <a href="{{ url_for('web.settings_page') }}"
+          class="nav-link {% if request.endpoint == 'web.settings_page' %}active{% endif %}">
+          <span class="nav-icon">S</span>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-row">
+          <div>
+            <div id="sidebar-username" class="user-name">User</div>
+            <span id="sidebar-user-role" class="user-role">USER</span>
+          </div>
+          <button id="logout-button" class="logout-link" type="button">
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button id="mobile-menu-button" class="mobile-menu-button" type="button" aria-label="Toggle navigation"
+            aria-expanded="false">
+            ☰
+          </button>
+
+          <strong>
+            {% block page_heading %}Dashboard{% endblock %}
+          </strong>
+        </div>
+
+        <span>WSL2 Integration</span>
+      </header>
+
+      <div class="page-content">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const sidebar = document.getElementById("app-sidebar");
+      const menuButton = document.getElementById("mobile-menu-button");
+      const overlay = document.getElementById("sidebar-overlay");
+
+      function closeSidebar() {
+        sidebar.classList.remove("mobile-open");
+        menuButton.setAttribute("aria-expanded", "false");
+        overlay.classList.remove("visible");
+      }
+
+      menuButton.addEventListener("click", () => {
+        const open = sidebar.classList.toggle("mobile-open");
+        menuButton.setAttribute("aria-expanded", String(open));
+        overlay.classList.toggle("visible", open);
+      });
+
+      overlay.addEventListener("click", closeSidebar);
+
+      sidebar.querySelectorAll("a").forEach(link => {
+        link.addEventListener("click", closeSidebar);
+      });
+
+      document.getElementById("logout-button").addEventListener(
+        "click",
+        async () => {
+          try {
+            await window.api.post("/api/auth/logout", {});
+            window.location.href = "/login";
+          } catch (error) {
+            window.api.showToast(error.message, "error");
+          }
+        }
+      );
+
+      async function loadCurrentUser() {
+        try {
+          const response = await window.api.get("/api/auth/me");
+          const user = response?.data ?? response;
+
+          document.getElementById("sidebar-username").textContent =
+            user?.username ?? user?.name ?? user?.email ?? "User";
+
+          document.getElementById("sidebar-user-role").textContent =
+            String(user?.role ?? "USER").toUpperCase();
+        } catch (error) {
+          console.warn("Unable to load current user:", error.message);
+        }
+      }
+
+      loadCurrentUser();
+    })();
+  </script>
+
+  {% block scripts %}{% endblock %}
+  {% block extra_js %}{% endblock %}
+
+</body>
+
+</html>

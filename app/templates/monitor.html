@@ -1,0 +1,768 @@
+{% extends "base.html" %}
+
+{% block title %}Monitor - Portable Sandbox{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Sandbox Monitor</h1>
+    <p>Execute commands and monitor sandbox resource usage.</p>
+  </div>
+  <button id="refresh-page-btn" class="btn btn-secondary" type="button">
+    Refresh
+  </button>
+</div>
+
+<section class="card">
+  <h2>Command Execution</h2>
+
+  <form id="execute-form">
+    <div class="form-group">
+      <label for="sandbox-select">Select Sandbox</label>
+      <select id="sandbox-select" name="sandbox_id" required>
+        <option value="">Loading sandboxes...</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="command-input">Command</label>
+      <input id="command-input" name="command" type="text" placeholder="e.g. echo Hello Sandbox" required
+        autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input id="monitoring-enabled" type="checkbox" checked>
+        Enable resource monitoring
+      </label>
+    </div>
+
+    <button id="execute-btn" class="btn btn-primary" type="submit">
+      Execute Command
+    </button>
+  </form>
+
+  <p id="execution-message" role="status"></p>
+</section>
+
+<section class="card">
+  <h2>Current Execution</h2>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Run ID</span>
+      <strong id="run-id">—</strong>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Process ID</span>
+      <strong id="process-id">—</strong>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Status</span>
+      <strong id="execution-status">—</strong>
+    </div>
+  </div>
+
+  <div class="button-group">
+    <button id="refresh-execution-btn" class="btn btn-secondary" type="button">
+      Refresh Execution
+    </button>
+
+    <button id="stop-execution-btn" class="btn btn-danger" type="button" disabled>
+      Stop Process
+    </button>
+
+    <button id="refresh-metrics-btn" class="btn btn-secondary" type="button">
+      Refresh Metrics
+    </button>
+  </div>
+
+  <h3>Standard Output</h3>
+  <pre id="stdout-output">No output yet.</pre>
+
+  <h3>Standard Error</h3>
+  <pre id="stderr-output">No errors.</pre>
+</section>
+
+<section class="card">
+  <h2>Resource Monitoring</h2>
+  <p id="metrics-message" role="status">
+    Execute a command and select its run to view metrics.
+  </p>
+  <p class="muted" style="font-size:13px; margin-top:-6px;">
+    Note: idle commands such as <code>sleep 60</code> can correctly show 0% CPU.
+  </p>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Metric Samples</span>
+      <strong id="metric-samples">0</strong>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Average CPU</span>
+      <strong id="metric-cpu">N/A</strong>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Average Memory</span>
+      <strong id="metric-memory">N/A</strong>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">Peak Memory</span>
+      <strong id="metric-peak-memory">N/A</strong>
+    </div>
+  </div>
+
+  <h3>Resource Metric Samples</h3>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>CPU (%)</th>
+          <th>RSS Memory (MB)</th>
+          <th>VMS Memory (MB)</th>
+          <th>Threads</th>
+        </tr>
+      </thead>
+      <tbody id="metrics-table-body">
+        <tr>
+          <td colspan="5">No metrics loaded.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Analytics Response</h3>
+  <pre id="analytics-output">No analytics loaded.</pre>
+</section>
+
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .stat-card {
+    padding: 18px;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 10px;
+    background: var(--card-background, transparent);
+  }
+
+  .stat-label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 13px;
+    opacity: 0.75;
+  }
+
+  .stat-card strong {
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .form-group select,
+  .form-group input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 6px;
+  }
+
+  .form-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+  }
+
+  .button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0;
+  }
+
+  .table-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 24px;
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color, #ddd);
+    white-space: nowrap;
+  }
+
+  /* Keep command output close to the original dark terminal panels. */
+  #stdout-output,
+  #stderr-output,
+  #analytics-output {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 42px;
+    margin: 8px 0 16px;
+    padding: 14px;
+    border: 1px solid #263247;
+    border-radius: 8px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: #111827;
+    color: #e5e7eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  #stderr-output {
+    color: #fca5a5;
+  }
+
+  #analytics-output {
+    max-height: 280px;
+  }
+
+  #execution-status {
+    text-transform: uppercase;
+  }
+
+  .stat-card {
+    background: var(--card-background, #fff);
+  }
+
+  .card h3 {
+    margin-top: 18px;
+    margin-bottom: 8px;
+  }
+
+  #execution-message,
+  #metrics-message {
+    margin-top: 12px;
+  }
+
+  @media (max-width: 600px) {
+    .page-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>
+
+<script>
+  (() => {
+    "use strict";
+
+    const client = window.api;
+
+    let currentRunId = null;
+    let currentSandboxId = null;
+    let metricsPollTimer = null;
+
+    function startLiveRefresh() {
+      if (metricsPollTimer) {
+        clearInterval(metricsPollTimer);
+      }
+
+      metricsPollTimer = setInterval(async () => {
+        if (!currentRunId) return;
+
+        await refreshExecution();
+        await loadMetrics();
+
+        const status = (
+          byId("execution-status").textContent || ""
+        ).trim().toUpperCase();
+
+        if (!["RUNNING", "PENDING"].includes(status)) {
+          clearInterval(metricsPollTimer);
+          metricsPollTimer = null;
+        }
+      }, 1000);
+    }
+
+    const byId = (id) => document.getElementById(id);
+
+    function setText(id, value) {
+      const element = byId(id);
+      if (element) {
+        element.textContent = value;
+      }
+    }
+
+    function escapeHtml(value) {
+      if (typeof window.escapeHtml === "function") {
+        return window.escapeHtml(String(value ?? ""));
+      }
+
+      return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[character]);
+    }
+
+    function unwrapResponse(response) {
+      if (response && typeof response === "object"
+        && Object.prototype.hasOwnProperty.call(response, "data")) {
+        return response.data;
+      }
+
+      return response;
+    }
+
+
+    function getArray(response) {
+      // Support both direct arrays and common API envelope shapes.
+      let payload = response;
+      for (let depth = 0; depth < 4 && payload && !Array.isArray(payload); depth++) {
+        if (Array.isArray(payload.sandboxes)) return payload.sandboxes;
+        if (Array.isArray(payload.items)) return payload.items;
+        if (Array.isArray(payload.results)) return payload.results;
+        if (Array.isArray(payload.data)) return payload.data;
+        payload = payload.data;
+      }
+      return Array.isArray(payload) ? payload : [];
+    }
+
+
+    function toMB(bytes) {
+      const number = Number(bytes);
+      return Number.isFinite(number) ? number / (1024 * 1024) : null;
+    }
+
+    function getRSSMB(record) {
+      if (record?.memory_rss_mb != null) {
+        return Number(record.memory_rss_mb);
+      }
+
+      if (record?.rss_mb != null) {
+        return Number(record.rss_mb);
+      }
+
+      if (record?.memory_mb != null) {
+        return Number(record.memory_mb);
+      }
+
+      if (record?.memory_rss_bytes != null) {
+        return toMB(record.memory_rss_bytes);
+      }
+
+      return null;
+    }
+
+    function getVMSMB(record) {
+      if (record?.memory_vms_mb != null) {
+        return Number(record.memory_vms_mb);
+      }
+
+      if (record?.memory_vms_bytes != null) {
+        return toMB(record.memory_vms_bytes);
+      }
+
+      return null;
+    }
+
+    function getCPU(record) {
+      const value = record?.cpu_percent
+        ?? record?.cpu_usage
+        ?? record?.cpu;
+
+      if (value == null || !Number.isFinite(Number(value))) {
+        return null;
+      }
+
+      return Number(value);
+    }
+
+    function formatNumber(value, suffix = "") {
+      if (value == null || !Number.isFinite(Number(value))) {
+        return "N/A";
+      }
+
+      return `${Number(value).toFixed(2)}${suffix}`;
+    }
+
+    async function loadSandboxes() {
+      const select = byId("sandbox-select");
+
+      try {
+        if (!client) throw new Error("API client is unavailable.");
+
+        const response = await client.get("/api/sandboxes");
+        const sandboxes = getArray(response);
+
+        select.innerHTML = "";
+
+        if (sandboxes.length === 0) {
+          select.innerHTML =
+            '<option value="">No sandboxes found</option>';
+          return;
+        }
+
+        sandboxes.forEach((sandbox) => {
+          const option = document.createElement("option");
+          option.value = sandbox.id;
+
+          option.textContent =
+            sandbox.name || `Sandbox ${sandbox.id}`;
+
+          select.appendChild(option);
+        });
+
+        if (currentSandboxId != null) {
+          select.value = String(currentSandboxId);
+        }
+      } catch (error) {
+        select.innerHTML =
+          '<option value="">Could not load sandboxes</option>';
+
+        setText(
+          "execution-message",
+          `Sandbox loading failed: ${error.message}`
+        );
+      }
+    }
+
+    function renderMetrics(response) {
+      const metrics = getArray(response);
+      const tbody = byId("metrics-table-body");
+
+      setText("metric-samples", metrics.length);
+
+      if (metrics.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="5">No resource samples found for this run.</td></tr>';
+        setText("metrics-message", "No resource metrics available.");
+        return;
+      }
+
+      const cpuValues = metrics
+        .map(getCPU)
+        .filter((value) => value != null);
+
+      const memoryValues = metrics
+        .map(getRSSMB)
+        .filter((value) => value != null && Number.isFinite(value));
+
+      const averageCPU = cpuValues.length
+        ? cpuValues.reduce((sum, value) => sum + value, 0) / cpuValues.length
+        : null;
+
+      const averageMemory = memoryValues.length
+        ? memoryValues.reduce((sum, value) => sum + value, 0)
+        / memoryValues.length
+        : null;
+
+      const peakMemory = memoryValues.length
+        ? Math.max(...memoryValues)
+        : null;
+
+      setText("metric-cpu", formatNumber(averageCPU, "%"));
+      setText("metric-memory", formatNumber(averageMemory, " MB"));
+      setText("metric-peak-memory", formatNumber(peakMemory, " MB"));
+
+      const latestMetrics = metrics.slice(-100).reverse();
+
+      tbody.innerHTML = latestMetrics.map((metric) => {
+        const timestamp = metric.timestamp
+          ? new Date(metric.timestamp).toLocaleString()
+          : "—";
+
+        const cpu = getCPU(metric);
+        const rss = getRSSMB(metric);
+        const vms = getVMSMB(metric);
+        const threads = metric.thread_count ?? "—";
+
+        return `
+                <tr>
+                    <td>${escapeHtml(timestamp)}</td>
+                    <td>${cpu == null ? "N/A" : cpu.toFixed(2)}</td>
+                    <td>${rss == null ? "N/A" : rss.toFixed(2)}</td>
+                    <td>${vms == null ? "N/A" : vms.toFixed(2)}</td>
+                    <td>${escapeHtml(threads)}</td>
+                </tr>
+            `;
+      }).join("");
+
+      setText(
+        "metrics-message",
+        `Loaded ${metrics.length} resource samples. Showing the latest ${latestMetrics.length}.`
+      );
+    }
+
+    async function loadMetrics() {
+      if (!currentRunId) {
+        setText("metrics-message", "Execute a command first.");
+        return;
+      }
+
+      setText("metrics-message", "Loading resource metrics...");
+
+      try {
+        const encodedId = encodeURIComponent(currentRunId);
+
+        const [metricsResult, analyticsResult] =
+          await Promise.allSettled([
+            client.get(`/api/executions/${encodedId}/metrics`),
+            client.get(`/api/executions/${encodedId}/analytics`)
+          ]);
+
+        if (metricsResult.status === "fulfilled") {
+          renderMetrics(metricsResult.value);
+        } else {
+          setText(
+            "metrics-message",
+            `Metrics request failed: ${metricsResult.reason?.message || "Unknown error"}`
+          );
+        }
+
+        if (analyticsResult.status === "fulfilled") {
+          // FIX: support both wrapped and already-unwrapped API responses.
+          const analytics = unwrapResponse(analyticsResult.value);
+
+          setText(
+            "analytics-output",
+            JSON.stringify(analytics ?? {}, null, 2)
+          );
+
+          if (analytics && typeof analytics === "object") {
+            if (analytics.sample_count != null) {
+              setText("metric-samples", analytics.sample_count);
+            }
+
+            setText(
+              "metric-cpu",
+              formatNumber(analytics.avg_cpu_percent, "%")
+            );
+
+            setText(
+              "metric-memory",
+              formatNumber(analytics.avg_rss_mb, " MB")
+            );
+
+            setText(
+              "metric-peak-memory",
+              formatNumber(analytics.peak_rss_mb, " MB")
+            );
+          }
+        } else {
+          setText(
+            "analytics-output",
+            `Analytics request failed: ${analyticsResult.reason?.message || "Unknown error"}`
+          );
+        }
+      } catch (error) {
+        setText("metrics-message", `Error: ${error.message}`);
+      }
+    }
+
+    async function refreshExecution() {
+      if (!currentRunId) {
+        setText("execution-message", "No execution selected.");
+        return;
+      }
+
+      try {
+        const response = await client.get(
+          `/api/executions/${encodeURIComponent(currentRunId)}`
+        );
+
+        const execution = unwrapResponse(response);
+
+        if (!execution) {
+          throw new Error("Execution details were not returned.");
+        }
+
+        setText("run-id", execution.run_id ?? currentRunId);
+        setText("process-id", execution.pid ?? execution.process_id ?? "—");
+        setText("execution-status", execution.status ?? "UNKNOWN");
+
+        setText(
+          "stdout-output",
+          execution.stdout ?? execution.output ?? "No standard output."
+        );
+
+        setText(
+          "stderr-output",
+          execution.stderr ?? execution.error_output ?? "No errors."
+        );
+
+        const status = String(execution.status ?? "").toUpperCase();
+
+        byId("stop-execution-btn").disabled =
+          !["RUNNING", "PENDING"].includes(status);
+
+        setText("execution-message", `Execution status: ${status || "UNKNOWN"}`);
+      } catch (error) {
+        setText(
+          "execution-message",
+          `Could not refresh execution: ${error.message}`
+        );
+      }
+    }
+
+    byId("execute-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const sandboxId = byId("sandbox-select").value;
+      const command = byId("command-input").value.trim();
+      const monitoring = byId("monitoring-enabled").checked;
+
+      if (!sandboxId) {
+        setText("execution-message", "Select a sandbox first.");
+        return;
+      }
+
+      if (!command) {
+        setText("execution-message", "Enter a command.");
+        return;
+      }
+
+      const button = byId("execute-btn");
+      button.disabled = true;
+      setText("execution-message", "Starting command...");
+
+      try {
+        const response = await client.post(
+          `/api/sandboxes/${encodeURIComponent(sandboxId)}/execute`,
+          {
+            command,
+            monitor: monitoring,
+            monitoring_enabled: monitoring,
+            async: true
+          }
+        );
+
+        const result = unwrapResponse(response);
+
+        if (!result || !result.run_id) {
+          throw new Error(
+            result?.message || "The API did not return a run ID."
+          );
+        }
+
+        currentSandboxId = sandboxId;
+        currentRunId = result.run_id;
+
+        setText("run-id", result.run_id);
+        setText("process-id", result.pid ?? "—");
+        setText("execution-status", result.status ?? "RUNNING");
+        setText("stdout-output", "Waiting for output...");
+        setText("stderr-output", "No errors.");
+        byId("stop-execution-btn").disabled = false;
+
+        setText(
+          "execution-message",
+          `Command started. Run ID: ${result.run_id}`
+        );
+
+        await refreshExecution();
+        await loadMetrics();
+        startLiveRefresh();
+      } catch (error) {
+        setText(
+          "execution-message",
+          `Execution failed: ${error.message}`
+        );
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    byId("refresh-metrics-btn").addEventListener("click", loadMetrics);
+
+    byId("refresh-execution-btn").addEventListener(
+      "click",
+      refreshExecution
+    );
+
+    byId("refresh-page-btn").addEventListener("click", async () => {
+      await loadSandboxes();
+
+      if (currentRunId) {
+        await refreshExecution();
+        await loadMetrics();
+      }
+    });
+
+    byId("sandbox-select").addEventListener("change", (event) => {
+      currentSandboxId = event.target.value || null;
+    });
+
+    byId("stop-execution-btn").addEventListener("click", async () => {
+      if (!currentRunId) return;
+
+      const button = byId("stop-execution-btn");
+      button.disabled = true;
+
+      try {
+        const response = await client.post(
+          `/api/executions/${encodeURIComponent(currentRunId)}/stop`,
+          {}
+        );
+
+        const result = unwrapResponse(response);
+
+        setText(
+          "execution-message",
+          result?.message || "Stop request sent."
+        );
+
+        await refreshExecution();
+        await loadMetrics();
+      } catch (error) {
+        setText(
+          "execution-message",
+          `Could not stop process: ${error.message}`
+        );
+        button.disabled = false;
+      }
+    });
+
+    if (!client) {
+      setText(
+        "execution-message",
+        "API client not found. Check that api.js loads before this script."
+      );
+    } else {
+      loadSandboxes();
+    }
+  })();
+</script>
+{% endblock %}
