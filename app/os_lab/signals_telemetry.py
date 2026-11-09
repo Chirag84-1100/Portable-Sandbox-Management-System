@@ -62,6 +62,16 @@ def demonstrate_signal_termination(
     still_alive = psutil.pid_exists(pid)
     final_record = get_execution_run_by_id(run_id, db_path=db_path) or {}
 
+    try:
+        from app.database import log_activity
+        log_activity(
+            action="OS_LAB_SIGNALS",
+            details=f"Signal termination sequence on run {run_id} (PID {pid}): {final_record.get('status')}",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
+
     return {
         "sandbox_id": sandbox_id,
         "run_id": run_id,
@@ -122,6 +132,16 @@ def demonstrate_resource_telemetry(
     metrics = get_metrics_for_run(run_id, limit=20, db_path=db_path)
     analytics = get_run_resource_analytics(run_id, db_path=db_path)
     host_stats = get_host_system_stats()
+
+    try:
+        from app.database import log_activity
+        log_activity(
+            action="OS_LAB_SIGNALS",
+            details=f"Signal termination sequence on run {run_id} (PID {pid}): {final_record.get('status')}",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
 
     return {
         "run_id": run_id,

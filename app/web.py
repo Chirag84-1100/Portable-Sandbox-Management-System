@@ -97,15 +97,20 @@ def settings_page():
 # =========================
 
 import json
+import sys
 from threading import Thread
-from flask import request
+from flask import current_app, request
 
-from app.os_lab.scheduling import fcfs, sjf, round_robin
-from app.os_lab.scheduling import validate_processes
+from app.database import log_activity
+from app.sandbox import get_or_create_default_sandbox
+from app.os_lab.scheduling import fcfs, sjf, round_robin, validate_processes
 from app.os_lab.memory import allocate_memory
 from app.os_lab.deadlock import bankers_algorithm
 from app.os_lab.synchronization import BoundedBuffer
 from app.os_lab.ipc import pipe_communication
+from app.os_lab.process_control import run_process_demonstration, demonstrate_process_timeout
+from app.os_lab.filesystem_isolation import demonstrate_filesystem_isolation, verify_path_boundaries
+from app.os_lab.signals_telemetry import demonstrate_signal_termination, demonstrate_resource_telemetry
 from app.dbms_lab.demonstrations import (
     create_demo_database,
     execute_dbms_demonstration,
@@ -119,10 +124,16 @@ def os_lab_page():
     error = None
     selected_module = ""
     input_json = ""
+    user_id = session.get("user_id")
 
     if request.method == "POST":
-        selected_module = request.form.get("module", "")
-        input_json = request.form.get("payload", "")
+        selected_module = request.form.get("module", "").strip()
+        input_json = request.form.get("payload", "").strip()
+
+        # Resolve active user sandbox workspace
+        user_sandbox = get_or_create_default_sandbox(user_id) if user_id else {}
+        sandbox_id = user_sandbox.get("id")
+        working_dir = user_sandbox.get("working_dir")
 
         try:
             data = json.loads(input_json or "{}")
@@ -142,12 +153,15 @@ def os_lab_page():
                 else:
                     raise ValueError("Unknown scheduling algorithm.")
 
+                log_activity("OS_LAB_SCHEDULING", user_id=user_id, details=f"Algorithm: {algorithm}")
+
             elif selected_module == "memory":
                 result = allocate_memory(
                     data["blocks"],
                     data["processes"],
                     data.get("strategy", "first_fit"),
                 )
+                log_activity("OS_LAB_MEMORY", user_id=user_id, details=f"Strategy: {data.get('strategy', 'first_fit')}")
 
             elif selected_module == "deadlock":
                 result = bankers_algorithm(
@@ -155,6 +169,7 @@ def os_lab_page():
                     data["allocation"],
                     data["maximum"],
                 )
+                log_activity("OS_LAB_DEADLOCK", user_id=user_id, details="Banker's Algorithm")
 
             elif selected_module == "synchronization":
                 buffer = BoundedBuffer(int(data.get("capacity", 3)))
@@ -180,14 +195,47 @@ def os_lab_page():
                     "consumed_items": consumed,
                     "buffer_status": buffer.get_status(),
                 }
+                log_activity("OS_LAB_SYNCHRONIZATION", user_id=user_id, details="Producer-Consumer Synchronization")
 
             elif selected_module == "ipc":
+                message = str(data.get("message", "Hello from Parent Process!"))
                 result = pipe_communication(
-                    str(data.get("message", "Hello from Parent Process!"))
+                    message=message,
+                    sandbox_id=sandbox_id,
+                    working_dir=working_dir,
+                )
+                log_activity("OS_LAB_IPC", user_id=user_id, details="IPC Pipe Communication")
+
+            elif selected_module in ("process_control", "lifecycle"):
+                cmd = data.get("command", [sys.executable, "-c", "import os; print(f'Process Lifecycle OK, PID: {os.getpid()}')"])
+                timeout = float(data.get("timeout", 5.0))
+                result = run_process_demonstration(
+                    sandbox_id=sandbox_id,
+                    command=cmd,
+                    working_dir=working_dir,
+                    timeout=timeout,
                 )
 
+            elif selected_module == "isolation":
+                result = demonstrate_filesystem_isolation(
+                    sandbox_id=sandbox_id,
+                    working_dir=working_dir,
+                )
+
+            elif selected_module in ("signals", "telemetry"):
+                if data.get("action") == "telemetry":
+                    result = demonstrate_resource_telemetry(
+                        sandbox_id=sandbox_id,
+                        working_dir=working_dir,
+                    )
+                else:
+                    result = demonstrate_signal_termination(
+                        sandbox_id=sandbox_id,
+                        working_dir=working_dir,
+                    )
+
             else:
-                raise ValueError("Select a valid OS demonstration.")
+                raise ValueError(f"Select a valid OS demonstration. Unknown module: '{selected_module}'.")
 
         except Exception as exc:
             error = str(exc)
@@ -208,13 +256,18 @@ def dbms_lab_page():
     result = None
     error = None
     selected_module = ""
+    user_id = session.get("user_id")
 
     if request.method == "POST":
-        selected_module = request.form.get("module", "")
-        db = None
+        selected_module = request.form.get("module", "").strip()
 
         try:
             result = execute_dbms_demonstration(selected_module)
+            log_activity(
+                action=f"DBMS_LAB_{selected_module.upper()}",
+                user_id=user_id,
+                details=f"Demonstration: {selected_module} on persistent project SQLite database",
+            )
         except Exception as exc:
             error = str(exc)
 

@@ -1,4 +1,5 @@
 import sqlite3
+import sys
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, request, session
@@ -33,6 +34,7 @@ from app.monitor import get_host_system_stats
 from app.sandbox import (
     ensure_sandbox_dir,
     execute_sync,
+    get_or_create_default_sandbox,
     registry,
     spawn_process,
     stop_execution,
@@ -563,3 +565,174 @@ def activity_logs_endpoint():
     user_filter = None if (user["role"] == "admin" and request.args.get("all") == "true") else user["id"]
     logs = list_recent_activity(user_id=user_filter, limit=limit, db_path=get_db_path())
     return json_success(data=logs)
+
+
+# ==========================================
+# 5. LAB INTEGRATION ENDPOINTS
+# ==========================================
+
+from threading import Thread
+from app.os_lab.scheduling import fcfs, sjf, round_robin, validate_processes
+from app.os_lab.memory import allocate_memory
+from app.os_lab.deadlock import bankers_algorithm
+from app.os_lab.synchronization import BoundedBuffer
+from app.os_lab.ipc import pipe_communication
+from app.os_lab.process_control import run_process_demonstration, demonstrate_process_timeout
+from app.os_lab.filesystem_isolation import demonstrate_filesystem_isolation, verify_path_boundaries
+from app.os_lab.signals_telemetry import demonstrate_signal_termination, demonstrate_resource_telemetry
+from app.dbms_lab.demonstrations import execute_dbms_demonstration
+
+
+@api_bp.route("/labs/os/run", methods=["POST"])
+@login_required
+def run_os_lab_endpoint():
+    """
+    Executes an OS Lab demonstration.
+    Algorithmic modules (scheduling, memory, deadlock, sync) run as manager-policy simulations.
+    System modules (ipc, process_control, isolation, signals) run through Bubblewrap sandbox execution.
+    Logs execution to activity_logs and execution_runs.
+    """
+    user = get_current_user(db_path=get_db_path())
+    data = request.get_json(silent=True) or {}
+    module = str(data.get("module", "")).strip().lower()
+    payload = data.get("payload", {})
+    if isinstance(payload, str):
+        import json
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            payload = {}
+
+    db_path = get_db_path()
+
+    # Resolve active sandbox workspace for the user
+    user_sandbox = get_or_create_default_sandbox(user["id"], db_path=db_path)
+    sandbox_id = int(data.get("sandbox_id") or user_sandbox.get("id"))
+    working_dir = user_sandbox.get("working_dir")
+
+    try:
+        if module == "scheduling":
+            processes = payload.get("processes", [])
+            validate_processes(processes)
+            algo = payload.get("algorithm", "fcfs")
+            quantum = int(payload.get("quantum", 2))
+            if algo == "fcfs":
+                result = fcfs(processes)
+            elif algo == "sjf":
+                result = sjf(processes)
+            elif algo == "round_robin":
+                result = round_robin(processes, quantum)
+            else:
+                return json_error("Unknown scheduling algorithm.", "INVALID_INPUT", 400)
+
+            log_activity("OS_LAB_SCHEDULING", user_id=user["id"], details=f"Algorithm {algo} on {len(processes)} processes", db_path=db_path)
+            return json_success(data=result, message=f"CPU scheduling ({algo}) calculated successfully.")
+
+        elif module == "memory":
+            blocks = payload.get("blocks", [100, 500, 200, 300, 600])
+            processes = payload.get("processes", [212, 417, 112, 426])
+            strategy = payload.get("strategy", "first_fit")
+            result = allocate_memory(blocks, processes, strategy)
+            log_activity("OS_LAB_MEMORY", user_id=user["id"], details=f"Memory allocation ({strategy}) for {len(processes)} processes", db_path=db_path)
+            return json_success(data=result, message=f"Memory allocation ({strategy}) completed.")
+
+        elif module == "deadlock":
+            available = payload.get("available", [3, 3, 2])
+            allocation = payload.get("allocation", [[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]])
+            maximum = payload.get("maximum", [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]])
+            result = bankers_algorithm(available, allocation, maximum)
+            log_activity("OS_LAB_DEADLOCK", user_id=user["id"], details=f"Banker's Algorithm safe={result.get('safe')}", db_path=db_path)
+            return json_success(data=result, message="Banker's algorithm evaluated successfully.")
+
+        elif module == "synchronization":
+            capacity = int(payload.get("capacity", 3))
+            items = payload.get("items", [1, 2, 3, 4, 5])
+            buffer = BoundedBuffer(capacity)
+            consumed = []
+
+            def producer():
+                for item in items:
+                    buffer.produce(item)
+
+            def consumer():
+                for _ in items:
+                    consumed.append(buffer.consume())
+
+            p = Thread(target=producer)
+            c = Thread(target=consumer)
+            p.start()
+            c.start()
+            p.join()
+            c.join()
+
+            result = {
+                "consumed_items": consumed,
+                "buffer_status": buffer.get_status(),
+            }
+            log_activity("OS_LAB_SYNCHRONIZATION", user_id=user["id"], details=f"Bounded buffer capacity {capacity}, {len(items)} items", db_path=db_path)
+            return json_success(data=result, message="Producer-consumer synchronization demonstration completed.")
+
+        elif module == "ipc":
+            message = str(payload.get("message", "Hello from Parent Process!"))
+            result = pipe_communication(message, sandbox_id=sandbox_id, working_dir=working_dir, db_path=db_path)
+            log_activity("OS_LAB_IPC", user_id=user["id"], details=f"IPC pipe demonstration: {message[:40]}", db_path=db_path)
+            return json_success(data=result, message="IPC pipe demonstration executed in Bubblewrap sandbox.")
+
+        elif module in ("process_control", "lifecycle"):
+            command = payload.get("command", [sys.executable, "-c", "import os; print(f'Process Lifecycle OK, PID: {os.getpid()}')"])
+            timeout = float(payload.get("timeout", 5.0))
+            result = run_process_demonstration(sandbox_id=sandbox_id, command=command, working_dir=working_dir, timeout=timeout, db_path=db_path)
+            return json_success(data=result, message="Process lifecycle demonstration executed in sandbox.")
+
+        elif module == "isolation":
+            result = demonstrate_filesystem_isolation(sandbox_id=sandbox_id, working_dir=working_dir, db_path=db_path)
+            return json_success(data=result, message="Bubblewrap filesystem isolation probe executed successfully.")
+
+        elif module in ("signals", "telemetry"):
+            if payload.get("action") == "telemetry":
+                result = demonstrate_resource_telemetry(sandbox_id=sandbox_id, working_dir=working_dir, db_path=db_path)
+            else:
+                result = demonstrate_signal_termination(sandbox_id=sandbox_id, working_dir=working_dir, db_path=db_path)
+            return json_success(data=result, message="OS signals and telemetry demonstration completed.")
+
+        else:
+            return json_error(f"Unknown OS Lab module: '{module}'.", "INVALID_INPUT", 400)
+
+    except ValueError as e:
+        return json_error(str(e), "INVALID_INPUT", 400)
+    except Exception as e:
+        return json_error(f"OS Lab execution failed: {str(e)}", "SERVER_ERROR", 500)
+
+
+@api_bp.route("/labs/dbms/run", methods=["POST"])
+@login_required
+def run_dbms_lab_endpoint():
+    """
+    Executes a DBMS Lab demonstration against the persistent project SQLite database.
+    Demonstrates 8 core DBMS concepts with automatic cleanup and transaction safety.
+    """
+    user = get_current_user(db_path=get_db_path())
+    data = request.get_json(silent=True) or {}
+    module = str(data.get("module", "")).strip().lower()
+
+    if not module:
+        return json_error("DBMS module parameter is required.", "INVALID_INPUT", 400)
+
+    db_path = get_db_path()
+
+    try:
+        result = execute_dbms_demonstration(module, db_path=db_path)
+        log_activity(
+            action=f"DBMS_LAB_{module.upper()}",
+            user_id=user["id"],
+            details=f"Demonstration: {module} against persistent SQLite database",
+            db_path=db_path,
+        )
+        return json_success(
+            data={"module": module, "result": result},
+            message=f"DBMS demonstration '{module}' executed successfully.",
+        )
+    except ValueError as e:
+        return json_error(str(e), "INVALID_INPUT", 400)
+    except Exception as e:
+        return json_error(f"DBMS execution failed: {str(e)}", "SERVER_ERROR", 500)

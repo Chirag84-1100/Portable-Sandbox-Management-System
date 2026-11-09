@@ -79,3 +79,43 @@ FOR EACH ROW
 BEGIN
     UPDATE sandboxes SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
 END;
+
+-- ==========================================
+-- 6. Dedicated DBMS Lab Educational Schema
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS lab_departments (
+    department_id INTEGER PRIMARY KEY,
+    department_name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS lab_employees (
+    employee_id INTEGER PRIMARY KEY,
+    employee_name TEXT NOT NULL,
+    salary REAL CHECK(salary > 0),
+    department_id INTEGER,
+    FOREIGN KEY (department_id) REFERENCES lab_departments(department_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS lab_salary_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    old_salary REAL,
+    new_salary REAL,
+    changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lab_employee_dept ON lab_employees(department_id);
+
+CREATE VIEW IF NOT EXISTS lab_employee_dept_view AS
+SELECT e.employee_id, e.employee_name, e.salary, d.department_name
+FROM lab_employees e
+JOIN lab_departments d ON e.department_id = d.department_id;
+
+CREATE TRIGGER IF NOT EXISTS trg_lab_salary_audit
+AFTER UPDATE OF salary ON lab_employees
+FOR EACH ROW
+BEGIN
+    INSERT INTO lab_salary_audit (employee_id, old_salary, new_salary)
+    VALUES (OLD.employee_id, OLD.salary, NEW.salary);
+END;

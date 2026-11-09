@@ -105,6 +105,45 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Process Lifecycle & Control</h2>
+  <p>Execute and track process creation, state progression (QUEUED &rarr; RUNNING &rarr; COMPLETED), exit codes, and output streams inside the Bubblewrap sandbox.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="process_control">
+    <label>Execution Command (JSON)</label>
+    <textarea name="payload" rows="3" required>{
+  "command": ["python3", "-c", "import os; print(f'Process Control Verified, Isolated PID: {os.getpid()}')"],
+  "timeout": 5.0
+}</textarea>
+    <button class="btn btn-primary" type="submit">Run Process Control</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Filesystem & Security Isolation</h2>
+  <p>Verify Bubblewrap container boundaries: test read-only host root enforcement (blocking unauthorized writes) and verify permitted workspace writes.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="isolation">
+    <input type="hidden" name="payload" value="{}">
+    <button class="btn btn-primary" type="submit">Probe Isolation Boundary</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Resource Monitoring & Signals</h2>
+  <p>Demonstrate graceful SIGTERM termination escalating to forceful SIGKILL, alongside real-time psutil CPU/memory telemetry recorded in the database.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="signals">
+    <label>Action</label>
+    <select name="action_select" id="signal-action" onchange="this.form.payload.value=JSON.stringify({action:this.value})">
+      <option value="termination">Signal Termination (SIGTERM &rarr; SIGKILL)</option>
+      <option value="telemetry">Workload Telemetry (CPU & Memory Tracking)</option>
+    </select>
+    <input type="hidden" name="payload" value='{"action":"termination"}'>
+    <button class="btn btn-primary" type="submit" style="margin-top: 10px;">Run Signals & Telemetry</button>
+  </form>
+</section>
+
 {% if error %}
 <section class="card">
   <h2>Execution Error</h2>

@@ -133,6 +133,16 @@ def demonstrate_filesystem_isolation(
     root_blocked = "ROOT_BLOCKED=True" in stdout
     workspace_allowed = "WORKSPACE_ALLOWED=True" in stdout
 
+    try:
+        from app.database import log_activity
+        log_activity(
+            action="OS_LAB_ISOLATION",
+            details=f"Bubblewrap isolation probe on sandbox {sandbox_id} (read-only root: {root_blocked})",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
+
     return {
         "sandbox_id": sandbox_id,
         "working_dir": str(target_dir),

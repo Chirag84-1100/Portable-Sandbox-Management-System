@@ -41,6 +41,16 @@ def run_process_demonstration(
         db_path=db_path,
     )
 
+    try:
+        from app.database import log_activity
+        log_activity(
+            action="OS_LAB_PROCESS_CONTROL",
+            details=f"Run {run_record.get('id')} ({run_record.get('status')}): {' '.join(sanitized)[:60]}",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
+
     return {
         "sandbox_id": sandbox_id,
         "command": " ".join(sanitized),

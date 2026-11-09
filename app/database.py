@@ -39,15 +39,38 @@ def transaction(conn: sqlite3.Connection):
         conn.rollback()
         raise
 
+def seed_lab_data(conn: sqlite3.Connection) -> None:
+    """Populates dedicated DBMS lab tables with educational seed records if empty."""
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM lab_departments")
+        if cur.fetchone()[0] == 0:
+            conn.executescript("""
+                INSERT OR IGNORE INTO lab_departments (department_id, department_name) VALUES
+                    (1, 'Engineering'),
+                    (2, 'HR'),
+                    (3, 'Finance');
+
+                INSERT OR IGNORE INTO lab_employees (employee_id, employee_name, salary, department_id) VALUES
+                    (101, 'Aman', 50000, 1),
+                    (102, 'Riya', 60000, 1),
+                    (103, 'Karan', 40000, 2),
+                    (104, 'Neha', 55000, 3);
+            """)
+    except sqlite3.OperationalError:
+        pass
+
+
 def init_db(db_path: Optional[str]=None, schema_path: Optional[str]=None, conn: Optional[sqlite3.Connection]=None) -> None:
     target_schema = schema_path or DEFAULT_SCHEMA_PATH
     with open(target_schema, 'r', encoding='utf-8') as f:
         schema_sql = f.read()
     if conn is not None:
         conn.executescript(schema_sql)
+        seed_lab_data(conn)
     else:
         with get_db_connection(db_path) as new_conn:
             new_conn.executescript(schema_sql)
+            seed_lab_data(new_conn)
 
 def create_user(username: str, password: str, role: str='user', db_path: Optional[str]=None, conn: Optional[sqlite3.Connection]=None) -> int:
     password_hash = generate_password_hash(password)

@@ -11,7 +11,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from app.database import (
     create_execution_run,
+    create_sandbox,
     get_execution_run_by_id,
+    get_sandbox_by_id,
+    list_sandboxes_for_user,
     log_activity,
     update_execution_run,
 )
@@ -48,6 +51,26 @@ def ensure_sandbox_dir(working_dir: Union[str, Path]) -> Path:
     resolved = validate_sandbox_path(working_dir)
     resolved.mkdir(parents=True, exist_ok=True)
     return resolved
+
+
+def get_or_create_default_sandbox(
+    user_id: int, db_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """Retrieves an active sandbox for the user or creates a dedicated 'Lab Workspace' if none exists."""
+    sandboxes = list_sandboxes_for_user(user_id, db_path=db_path)
+    if sandboxes:
+        return sandboxes[0]
+
+    rel_dir = f"sb_{user_id}_lab_workspace"
+    sb_id = create_sandbox(
+        user_id=user_id,
+        name="Lab Workspace",
+        description="Dedicated workspace for OS and DBMS lab experiments",
+        working_dir=rel_dir,
+        db_path=db_path,
+    )
+    ensure_sandbox_dir(rel_dir)
+    return get_sandbox_by_id(sb_id, db_path=db_path) or {}
 
 def sanitize_command(command: Union[str, List[str]]) -> List[str]:
 
