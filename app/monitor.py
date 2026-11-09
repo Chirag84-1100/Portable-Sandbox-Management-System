@@ -1,9 +1,8 @@
-
 """
 Resource Monitoring Component for Portable Sandbox Management System.
 
-Tracks CPU utilization, RSS/VMS memory, and thread count using psutil.
-Resource samples are periodically persisted through the database layer.
+Tracks CPU utilization using process CPU-time deltas.
+Includes the Bubblewrap process and its visible descendants.
 """
 
 import threading
@@ -16,7 +15,7 @@ from app.database import log_resource_metric
 
 
 class ProcessMonitorThread(threading.Thread):
-    """Periodically collect and persist process resource metrics."""
+    """Periodically collect process-tree resource metrics."""
 
     def __init__(
         self,
@@ -36,68 +35,122 @@ class ProcessMonitorThread(threading.Thread):
         self._stop_event = threading.Event()
         self.sample_count = 0
 
-    def run(self) -> None:
-        """Sample CPU over a real interval, then persist resource metrics."""
+    def _get_process_tree(self):
         try:
-            proc = psutil.Process(self.pid)
+            root = psutil.Process(self.pid)
+            processes = [root]
+            processes.extend(root.children(recursive=True))
 
-            # Prime CPU counters before measuring the first interval.
-            proc.cpu_percent(interval=None)
+            unique = {}
+            for process in processes:
+                unique[process.pid] = process
 
-        except (
-            psutil.NoSuchProcess,
-            psutil.AccessDenied,
-            psutil.ZombieProcess,
-        ):
-            return
+            return list(unique.values())
 
-        while (
-            not self._stop_event.is_set()
-            and self.sample_count < self.max_samples
-        ):
-            # Wait without blocking shutdown for the full interval.
-            if self._stop_event.wait(self.interval):
-                break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return []
 
+    def run(self) -> None:
+        previous_cpu = {}
+
+        # Take initial CPU-time readings.
+        for process in self._get_process_tree():
             try:
-                if not proc.is_running():
-                    break
-
-                if proc.status() == psutil.STATUS_ZOMBIE:
-                    break
-
-                # Non-blocking CPU measurement uses time since the last
-                # CPU sample. The preceding wait provides the sample interval.
-                cpu = proc.cpu_percent(interval=None)
-
-                # Read memory and thread metrics independently.
-                mem = proc.memory_info()
-                threads = proc.num_threads()
-
-                log_resource_metric(
-                    run_id=self.run_id,
-                    cpu_percent=float(cpu),
-                    memory_rss_bytes=int(mem.rss),
-                    memory_vms_bytes=int(mem.vms),
-                    thread_count=int(threads),
-                    db_path=self.db_path,
-                )
-
-                self.sample_count += 1
-
+                identity = (process.pid, process.create_time())
+                cpu_times = process.cpu_times()
+                previous_cpu[identity] = cpu_times.user + cpu_times.system
             except (
                 psutil.NoSuchProcess,
                 psutil.AccessDenied,
                 psutil.ZombieProcess,
             ):
+                continue
+
+        previous_time = time.monotonic()
+
+        while (
+            not self._stop_event.wait(self.interval)
+            and self.sample_count < self.max_samples
+        ):
+            current_time = time.monotonic()
+            elapsed = current_time - previous_time
+
+            if elapsed <= 0:
+                continue
+
+            processes = self._get_process_tree()
+
+            if not processes:
                 break
 
-            except Exception:
-                # Stop if persistence or sampling fails.
+            current_cpu = {}
+            cpu_delta = 0.0
+            total_rss = 0
+            total_vms = 0
+            total_threads = 0
+            active_processes = 0
+
+            for process in processes:
+                try:
+                    if not process.is_running():
+                        continue
+
+                    if process.status() == psutil.STATUS_ZOMBIE:
+                        continue
+
+                    identity = (process.pid, process.create_time())
+                    cpu_times = process.cpu_times()
+                    cpu_total = cpu_times.user + cpu_times.system
+
+                    if identity in previous_cpu:
+                        delta = cpu_total - previous_cpu[identity]
+                        if delta > 0:
+                            cpu_delta += delta
+
+                    current_cpu[identity] = cpu_total
+
+                    memory = process.memory_info()
+                    total_rss += memory.rss
+                    total_vms += memory.vms
+                    total_threads += process.num_threads()
+                    active_processes += 1
+
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.ZombieProcess,
+                ):
+                    continue
+
+            if active_processes == 0:
                 break
+
+            # Percentage relative to one CPU core.
+            cpu_percent = (cpu_delta / elapsed) * 100.0
+
+            try:
+                log_resource_metric(
+                    run_id=self.run_id,
+                    cpu_percent=float(cpu_percent),
+                    memory_rss_bytes=int(total_rss),
+                    memory_vms_bytes=int(total_vms),
+                    thread_count=int(total_threads),
+                    db_path=self.db_path,
+                )
+
+                self.sample_count += 1
+
+            except Exception as error:
+                print(
+                    f"[MONITOR ERROR] Run {self.run_id}: {error}",
+                    flush=True,
+                )
+                break
+
+            previous_cpu = current_cpu
+            previous_time = current_time
 
     def stop(self, timeout: float = 1.0) -> None:
-        """Request shutdown and wait briefly for the worker."""
         self._stop_event.set()
 
         if self.is_alive():
@@ -105,34 +158,43 @@ class ProcessMonitorThread(threading.Thread):
 
 
 def sample_process_metrics(pid: int) -> Optional[Dict[str, Any]]:
-    """
-    Return a one-shot resource snapshot for an active PID.
+    """Return a one-shot resource snapshot for a process tree."""
 
-    A single non-blocking CPU sample may be zero because CPU usage needs
-    elapsed time between samples. Use ProcessMonitorThread for ongoing
-    CPU measurements.
-    """
     try:
-        proc = psutil.Process(pid)
+        root = psutil.Process(pid)
+        processes = [root]
+        processes.extend(root.children(recursive=True))
 
-        if not proc.is_running():
-            return None
+        total_rss = 0
+        total_vms = 0
+        total_threads = 0
 
-        if proc.status() == psutil.STATUS_ZOMBIE:
-            return None
+        for process in processes:
+            try:
+                if not process.is_running():
+                    continue
 
-        mem = proc.memory_info()
+                memory = process.memory_info()
+                total_rss += memory.rss
+                total_vms += memory.vms
+                total_threads += process.num_threads()
+
+            except (
+                psutil.NoSuchProcess,
+                psutil.AccessDenied,
+                psutil.ZombieProcess,
+            ):
+                continue
 
         return {
             "pid": pid,
-            "cpu_percent": float(proc.cpu_percent(interval=None)),
-            "memory_rss_bytes": int(mem.rss),
-            "memory_vms_bytes": int(mem.vms),
+            "cpu_percent": 0.0,
+            "memory_rss_bytes": total_rss,
+            "memory_vms_bytes": total_vms,
             "memory_rss_mb": round(
-                mem.rss / (1024.0 * 1024.0), 2
+                total_rss / (1024.0 * 1024.0), 2
             ),
-            "thread_count": int(proc.num_threads()),
-            "status": proc.status(),
+            "thread_count": total_threads,
         }
 
     except (
@@ -145,6 +207,7 @@ def sample_process_metrics(pid: int) -> Optional[Dict[str, Any]]:
 
 def get_host_system_stats() -> Dict[str, Any]:
     """Capture CPU, memory, and disk usage for the WSL2 host."""
+
     vm = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
 

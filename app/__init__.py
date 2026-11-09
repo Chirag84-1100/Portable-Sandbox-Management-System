@@ -1,13 +1,9 @@
-"""
-Flask Application Factory for Portable Sandbox Management System.
-Demonstrates clean modular architecture, blueprint registration, and standardized error handling.
-"""
-
+from pathlib import Path
 from typing import Optional, Type
 from flask import Flask, jsonify
 
 from app.config import Config, DevelopmentConfig
-
+from app.database import init_db
 
 def create_app(config_class: Optional[Type[Config]] = None) -> Flask:
     """
@@ -20,6 +16,9 @@ def create_app(config_class: Optional[Type[Config]] = None) -> Flask:
         config_class = DevelopmentConfig
 
     app.config.from_object(config_class)
+    Path(app.config["DATABASE_PATH"]).parent.mkdir(parents=True, exist_ok=True)
+    Path(app.config["SANDBOXES_ROOT"]).mkdir(parents=True, exist_ok=True)
+    init_db(db_path=app.config["DATABASE_PATH"])
 
     # Register blueprints
     from app.api import api_bp

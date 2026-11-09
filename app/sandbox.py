@@ -1,19 +1,3 @@
-"""
-OS Process Engine & Sandbox Supervisor for Portable Sandbox Management System.
-Demonstrates Operating Systems concepts:
-- Process lifecycle management (QUEUED, RUNNING, COMPLETED, FAILED, TERMINATED, TIMED_OUT)
-- Process spawning and execution bounded to sandbox working directories
-- Path traversal validation and security boundary enforcement
-- Process group isolation (start_new_session) and signal dispatching
-- Two-stage termination protocol: graceful SIGTERM followed by forceful SIGKILL
-- Stream capture (stdout/stderr) and PID tracking
-- Integration with DBMS layer for audit and execution logging
-
-Academic Note:
-This engine implements user-space process supervision, controlled execution, and resource
-telemetry. It does not provide hypervisor-level virtualization or complete kernel namespace isolation.
-"""
-
 import os
 import shlex
 import signal
@@ -32,21 +16,13 @@ from app.database import (
     update_execution_run,
 )
 
-# Project paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-SANDBOXES_ROOT = (BASE_DIR / "sandboxes").resolve()
+SANDBOXES_ROOT = Path(
+    os.environ.get("SANDBOX_DATA_ROOT", str(BASE_DIR))
+).expanduser().resolve() / "sandboxes"
 
-
-# ==========================================
-# 1. PATH VALIDATION & DIRECTORY ISOLATION
-# ==========================================
 
 def validate_sandbox_path(working_dir: Union[str, Path]) -> Path:
-    """
-    Validates that a working directory is strictly inside the project sandboxes root.
-    Rejects directory traversal (e.g., '../', escaping symlinks, or absolute paths outside sandboxes).
-    Rejects targeting the sandboxes root folder itself (processes must execute in a subfolder).
-    """
     raw_path = Path(working_dir)
     if raw_path.is_absolute():
         resolved = raw_path.resolve()
@@ -56,7 +32,7 @@ def validate_sandbox_path(working_dir: Union[str, Path]) -> Path:
     try:
         is_sub = resolved.is_relative_to(SANDBOXES_ROOT)
     except AttributeError:
-        # Python < 3.9 compatibility fallback
+        
         common = os.path.commonpath([str(resolved), str(SANDBOXES_ROOT)])
         is_sub = common == str(SANDBOXES_ROOT)
 
@@ -69,24 +45,12 @@ def validate_sandbox_path(working_dir: Union[str, Path]) -> Path:
 
 
 def ensure_sandbox_dir(working_dir: Union[str, Path]) -> Path:
-    """
-    Validates and creates the target sandbox directory if it does not already exist.
-    Returns the resolved Path object.
-    """
     resolved = validate_sandbox_path(working_dir)
     resolved.mkdir(parents=True, exist_ok=True)
     return resolved
 
-
-# ==========================================
-# 2. COMMAND SANITIZATION & PARSING
-# ==========================================
-
 def sanitize_command(command: Union[str, List[str]]) -> List[str]:
-    """
-    Converts command input into a tokenized argument list using shlex.split without shell interpretation.
-    Guarantees shell=False execution, preventing arbitrary shell operator injection (; && | ` $).
-    """
+
     if isinstance(command, str):
         tokens = shlex.split(command)
     elif isinstance(command, (list, tuple)):
@@ -100,13 +64,7 @@ def sanitize_command(command: Union[str, List[str]]) -> List[str]:
     return tokens
 
 
-# ==========================================
-# 3. ACTIVE PROCESS REGISTRY
-# ==========================================
-
 class ProcessRegistry:
-    """Thread-safe registry tracking active supervised processes in memory."""
-
     def __init__(self):
         self._lock = threading.Lock()
         self._processes: Dict[int, subprocess.Popen] = {}
@@ -144,24 +102,12 @@ class ProcessRegistry:
 
 registry = ProcessRegistry()
 
-
-# ==========================================
-# 4. PROCESS TERMINATION PROTOCOL (SIGTERM -> SIGKILL)
-# ==========================================
-
 def terminate_process(
     pid: int,
     proc: Optional[subprocess.Popen] = None,
     grace_period: float = 2.0
 ) -> bool:
-    """
-    Terminates an OS process using a robust two-stage protocol:
-    1. Dispatches SIGTERM to the process group (allowing graceful shutdown).
-    2. Waits up to grace_period seconds for termination.
-    3. Escalates to SIGKILL if the process fails to exit.
-    Reaps the process to prevent zombie states.
-    """
-    # Check if process is still alive
+   
     if proc is not None:
         if proc.poll() is not None:
             return True
@@ -171,13 +117,11 @@ def terminate_process(
         except OSError:
             return True
 
-    # Obtain Process Group ID if available
     try:
         pgid = os.getpgid(pid)
     except (ProcessLookupError, PermissionError, OSError):
         pgid = None
 
-    # Step 1: Send SIGTERM to process group or PID
     try:
         if pgid is not None and pgid == pid:
             os.killpg(pgid, signal.SIGTERM)
@@ -185,8 +129,6 @@ def terminate_process(
             os.kill(pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError, OSError):
         return True
-
-    # Step 2: Poll for exit within grace period
     deadline = time.time() + max(0.1, grace_period)
     while time.time() < deadline:
         if proc is not None:
@@ -199,7 +141,6 @@ def terminate_process(
                 return True
         time.sleep(0.05)
 
-    # Step 3: Escalate to SIGKILL if still alive
     try:
         if pgid is not None and pgid == pid:
             os.killpg(pgid, signal.SIGKILL)
@@ -208,7 +149,6 @@ def terminate_process(
     except (ProcessLookupError, PermissionError, OSError):
         pass
 
-    # Final reap / wait
     if proc is not None:
         try:
             proc.wait(timeout=1.0)
@@ -222,9 +162,37 @@ def terminate_process(
         return True
 
 
-# ==========================================
-# 5. EXECUTION & PROCESS LIFECYCLE SUPERVISOR
-# ==========================================
+def build_isolated_command(
+    tokens: List[str],
+    target_dir: Path,
+) -> List[str]:
+    """Build a fail-closed Bubblewrap command for Linux execution."""
+    import shutil
+
+    bwrap = shutil.which("bwrap")
+    if not bwrap:
+        raise RuntimeError(
+            "Isolation unavailable: bubblewrap (bwrap) is not installed."
+        )
+
+    target_dir = target_dir.resolve()
+    if not target_dir.is_dir():
+        raise ValueError("Sandbox workspace must be an existing directory.")
+
+    return [
+        bwrap,
+        "--new-session",
+        "--unshare-all",
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--tmpfs", "/tmp",
+        "--bind", str(target_dir), str(target_dir),
+        "--chdir", str(target_dir),
+        "--",
+        *tokens,
+    ]
+
 
 def spawn_process(
     sandbox_id: int,
@@ -234,20 +202,11 @@ def spawn_process(
     enable_monitoring: bool = False,
     db_path: Optional[str] = None,
 ) -> Tuple[int, subprocess.Popen]:
-    """
-    Spawns a controlled process inside the designated sandbox working directory.
-    - Tokenizes command (shell=False)
-    - Starts process in a new session (process group)
-    - Captures stdout/stderr via pipes
-    - Records PID and RUNNING state in SQLite database
-    - Optionally starts background resource monitoring thread
-    Returns (run_id, Popen object).
-    """
+    
     tokens = sanitize_command(command)
     cmd_str = " ".join(tokens)
     target_dir = ensure_sandbox_dir(working_dir)
 
-    # If run_id not provided, record in execution_runs
     if run_id is None:
         run_id = create_execution_run(
             sandbox_id=sandbox_id,
@@ -256,7 +215,6 @@ def spawn_process(
             db_path=db_path
         )
 
-    # Clean execution environment
     clean_env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "LANG": "C.UTF-8",
@@ -265,16 +223,17 @@ def spawn_process(
         "PYTHONUNBUFFERED": "1",
     }
 
-    # Spawn process in new process group
+    isolated_tokens = build_isolated_command(tokens, target_dir)
+
     proc = subprocess.Popen(
-        tokens,
+        isolated_tokens,
         cwd=str(target_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
         env=clean_env,
-        start_new_session=True,  # New session/process group for clean signal handling
+        start_new_session=True,  
     )
 
     start_iso = datetime.now(timezone.utc).isoformat()
@@ -288,7 +247,6 @@ def spawn_process(
 
     monitor_thread = None
     if enable_monitoring:
-        # Import lazily to avoid circular dependencies
         from app.monitor import ProcessMonitorThread
         monitor_thread = ProcessMonitorThread(
             pid=proc.pid,
@@ -313,20 +271,14 @@ def stop_execution(
     grace_period: float = 2.0,
     db_path: Optional[str] = None
 ) -> bool:
-    """
-    Terminates an active execution run using the two-stage SIGTERM -> SIGKILL protocol.
-    Updates the database with TERMINATED state, output streams, and exit code.
-    """
+
     proc = registry.get_process(run_id)
     monitor = registry.get_monitor(run_id)
-
-    # Stop monitor if running
     if monitor is not None and hasattr(monitor, "stop"):
         monitor.stop()
 
     pid = proc.pid if proc else None
     if pid is None:
-        # Check database for PID
         record = get_execution_run_by_id(run_id, db_path=db_path)
         if record and record.get("pid"):
             pid = record["pid"]
@@ -334,10 +286,8 @@ def stop_execution(
     if pid is None:
         return False
 
-    # Execute termination protocol
     success = terminate_process(pid=pid, proc=proc, grace_period=grace_period)
 
-    # Capture remaining output if proc object is available
     stdout_text = ""
     stderr_text = ""
     exit_code = -signal.SIGTERM
@@ -380,11 +330,7 @@ def execute_sync(
     enable_monitoring: bool = False,
     db_path: Optional[str] = None
 ) -> Dict[str, Any]:
-    """
-    Executes a controlled command synchronously with optional timeout.
-    Monitors execution lifecycle and records exit state (COMPLETED, FAILED, or TIMED_OUT).
-    Returns the updated execution run dictionary.
-    """
+   
     run_id, proc = spawn_process(
         sandbox_id=sandbox_id,
         command=command,

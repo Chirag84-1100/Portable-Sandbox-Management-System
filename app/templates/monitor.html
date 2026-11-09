@@ -88,9 +88,11 @@
 
 <section class="card">
   <h2>Resource Monitoring</h2>
+
   <p id="metrics-message" role="status">
     Execute a command and select its run to view metrics.
   </p>
+
   <p class="muted" style="font-size:13px; margin-top:-6px;">
     Note: idle commands such as <code>sleep 60</code> can correctly show 0% CPU.
   </p>
@@ -130,6 +132,7 @@
           <th>Threads</th>
         </tr>
       </thead>
+
       <tbody id="metrics-table-body">
         <tr>
           <td colspan="5">No metrics loaded.</td>
@@ -318,6 +321,7 @@
 
     function setText(id, value) {
       const element = byId(id);
+
       if (element) {
         element.textContent = value;
       }
@@ -338,32 +342,43 @@
     }
 
     function unwrapResponse(response) {
-      if (response && typeof response === "object"
-        && Object.prototype.hasOwnProperty.call(response, "data")) {
+      if (
+        response &&
+        typeof response === "object" &&
+        Object.prototype.hasOwnProperty.call(response, "data")
+      ) {
         return response.data;
       }
 
       return response;
     }
 
-
     function getArray(response) {
       // Support both direct arrays and common API envelope shapes.
       let payload = response;
-      for (let depth = 0; depth < 4 && payload && !Array.isArray(payload); depth++) {
+
+      for (
+        let depth = 0;
+        depth < 4 && payload && !Array.isArray(payload);
+        depth++
+      ) {
         if (Array.isArray(payload.sandboxes)) return payload.sandboxes;
         if (Array.isArray(payload.items)) return payload.items;
         if (Array.isArray(payload.results)) return payload.results;
         if (Array.isArray(payload.data)) return payload.data;
+
         payload = payload.data;
       }
+
       return Array.isArray(payload) ? payload : [];
     }
 
-
     function toMB(bytes) {
       const number = Number(bytes);
-      return Number.isFinite(number) ? number / (1024 * 1024) : null;
+
+      return Number.isFinite(number)
+        ? number / (1024 * 1024)
+        : null;
     }
 
     function getRSSMB(record) {
@@ -422,7 +437,9 @@
       const select = byId("sandbox-select");
 
       try {
-        if (!client) throw new Error("API client is unavailable.");
+        if (!client) {
+          throw new Error("API client is unavailable.");
+        }
 
         const response = await client.get("/api/sandboxes");
         const sandboxes = getArray(response);
@@ -437,8 +454,8 @@
 
         sandboxes.forEach((sandbox) => {
           const option = document.createElement("option");
-          option.value = sandbox.id;
 
+          option.value = sandbox.id;
           option.textContent =
             sandbox.name || `Sandbox ${sandbox.id}`;
 
@@ -468,6 +485,7 @@
       if (metrics.length === 0) {
         tbody.innerHTML =
           '<tr><td colspan="5">No resource samples found for this run.</td></tr>';
+
         setText("metrics-message", "No resource metrics available.");
         return;
       }
@@ -481,7 +499,8 @@
         .filter((value) => value != null && Number.isFinite(value));
 
       const averageCPU = cpuValues.length
-        ? cpuValues.reduce((sum, value) => sum + value, 0) / cpuValues.length
+        ? cpuValues.reduce((sum, value) => sum + value, 0)
+        / cpuValues.length
         : null;
 
       const averageMemory = memoryValues.length
@@ -510,14 +529,14 @@
         const threads = metric.thread_count ?? "—";
 
         return `
-                <tr>
-                    <td>${escapeHtml(timestamp)}</td>
-                    <td>${cpu == null ? "N/A" : cpu.toFixed(2)}</td>
-                    <td>${rss == null ? "N/A" : rss.toFixed(2)}</td>
-                    <td>${vms == null ? "N/A" : vms.toFixed(2)}</td>
-                    <td>${escapeHtml(threads)}</td>
-                </tr>
-            `;
+          <tr>
+            <td>${escapeHtml(timestamp)}</td>
+            <td>${cpu == null ? "N/A" : cpu.toFixed(2)}</td>
+            <td>${rss == null ? "N/A" : rss.toFixed(2)}</td>
+            <td>${vms == null ? "N/A" : vms.toFixed(2)}</td>
+            <td>${escapeHtml(threads)}</td>
+          </tr>
+        `;
       }).join("");
 
       setText(
@@ -553,7 +572,7 @@
         }
 
         if (analyticsResult.status === "fulfilled") {
-          // FIX: support both wrapped and already-unwrapped API responses.
+          // Support both wrapped and already-unwrapped API responses.
           const analytics = unwrapResponse(analyticsResult.value);
 
           setText(
@@ -610,7 +629,10 @@
         }
 
         setText("run-id", execution.run_id ?? currentRunId);
-        setText("process-id", execution.pid ?? execution.process_id ?? "—");
+        setText(
+          "process-id",
+          execution.pid ?? execution.process_id ?? "—"
+        );
         setText("execution-status", execution.status ?? "UNKNOWN");
 
         setText(
@@ -628,7 +650,10 @@
         byId("stop-execution-btn").disabled =
           !["RUNNING", "PENDING"].includes(status);
 
-        setText("execution-message", `Execution status: ${status || "UNKNOWN"}`);
+        setText(
+          "execution-message",
+          `Execution status: ${status || "UNKNOWN"}`
+        );
       } catch (error) {
         setText(
           "execution-message",
@@ -637,6 +662,7 @@
       }
     }
 
+    // Execute command
     byId("execute-form").addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -656,6 +682,7 @@
 
       const button = byId("execute-btn");
       button.disabled = true;
+
       setText("execution-message", "Starting command...");
 
       try {
@@ -663,8 +690,7 @@
           `/api/sandboxes/${encodeURIComponent(sandboxId)}/execute`,
           {
             command,
-            monitor: monitoring,
-            monitoring_enabled: monitoring,
+            enable_monitoring: monitoring,
             async: true
           }
         );
@@ -685,6 +711,7 @@
         setText("execution-status", result.status ?? "RUNNING");
         setText("stdout-output", "Waiting for output...");
         setText("stderr-output", "No errors.");
+
         byId("stop-execution-btn").disabled = false;
 
         setText(
@@ -694,6 +721,7 @@
 
         await refreshExecution();
         await loadMetrics();
+
         startLiveRefresh();
       } catch (error) {
         setText(
@@ -705,56 +733,75 @@
       }
     });
 
-    byId("refresh-metrics-btn").addEventListener("click", loadMetrics);
+    // Refresh metrics
+    byId("refresh-metrics-btn").addEventListener(
+      "click",
+      loadMetrics
+    );
 
+    // Refresh execution
     byId("refresh-execution-btn").addEventListener(
       "click",
       refreshExecution
     );
 
-    byId("refresh-page-btn").addEventListener("click", async () => {
-      await loadSandboxes();
+    // Refresh complete page
+    byId("refresh-page-btn").addEventListener(
+      "click",
+      async () => {
+        await loadSandboxes();
 
-      if (currentRunId) {
-        await refreshExecution();
-        await loadMetrics();
+        if (currentRunId) {
+          await refreshExecution();
+          await loadMetrics();
+        }
       }
-    });
+    );
 
-    byId("sandbox-select").addEventListener("change", (event) => {
-      currentSandboxId = event.target.value || null;
-    });
-
-    byId("stop-execution-btn").addEventListener("click", async () => {
-      if (!currentRunId) return;
-
-      const button = byId("stop-execution-btn");
-      button.disabled = true;
-
-      try {
-        const response = await client.post(
-          `/api/executions/${encodeURIComponent(currentRunId)}/stop`,
-          {}
-        );
-
-        const result = unwrapResponse(response);
-
-        setText(
-          "execution-message",
-          result?.message || "Stop request sent."
-        );
-
-        await refreshExecution();
-        await loadMetrics();
-      } catch (error) {
-        setText(
-          "execution-message",
-          `Could not stop process: ${error.message}`
-        );
-        button.disabled = false;
+    // Sandbox selection
+    byId("sandbox-select").addEventListener(
+      "change",
+      (event) => {
+        currentSandboxId = event.target.value || null;
       }
-    });
+    );
 
+    // Stop process
+    byId("stop-execution-btn").addEventListener(
+      "click",
+      async () => {
+        if (!currentRunId) return;
+
+        const button = byId("stop-execution-btn");
+        button.disabled = true;
+
+        try {
+          const response = await client.post(
+            `/api/executions/${encodeURIComponent(currentRunId)}/stop`,
+            {}
+          );
+
+          const result = unwrapResponse(response);
+
+          setText(
+            "execution-message",
+            result?.message || "Stop request sent."
+          );
+
+          await refreshExecution();
+          await loadMetrics();
+        } catch (error) {
+          setText(
+            "execution-message",
+            `Could not stop process: ${error.message}`
+          );
+
+          button.disabled = false;
+        }
+      }
+    );
+
+    // Initialize page
     if (!client) {
       setText(
         "execution-message",
@@ -763,6 +810,8 @@
     } else {
       loadSandboxes();
     }
+
   })();
 </script>
+
 {% endblock %}

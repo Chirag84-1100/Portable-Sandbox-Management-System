@@ -1,36 +1,419 @@
 {% extends "base.html" %}
 
 {% block title %}Settings{% endblock %}
-{% block page_title %}Environment Settings{% endblock %}
+{% block page_heading %}System Settings & Information{% endblock %}
+
+{% block extra_css %}
+<style>
+  .settings-page {
+    display: grid;
+    gap: 20px;
+  }
+
+  .settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .settings-header p {
+    margin-top: 5px;
+  }
+
+  .settings-btn {
+    padding: 10px 15px;
+    border: 1px solid var(--border-gray);
+    border-radius: 9px;
+    background: white;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+  }
+
+  .settings-btn:disabled {
+    opacity: .6;
+    cursor: wait;
+  }
+
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .settings-card {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 20px;
+    min-width: 0;
+  }
+
+  .settings-card h3 {
+    margin-bottom: 17px;
+  }
+
+  .settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .settings-row:last-child {
+    border-bottom: 0;
+  }
+
+  .settings-label {
+    color: var(--text-gray);
+    font-size: 13px;
+  }
+
+  .settings-value {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .resource-item {
+    margin-top: 18px;
+  }
+
+  .resource-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .resource-track {
+    height: 9px;
+    background: var(--bg-subtle);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .resource-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #a855f7, #ec4899);
+    border-radius: inherit;
+    transition: width .3s ease;
+  }
+
+  .settings-status {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 20px;
+    background: var(--status-completed-bg);
+    color: var(--status-completed-color);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .settings-note {
+    color: var(--text-gray);
+    font-size: 12px;
+    margin-top: 12px;
+  }
+
+  .settings-error {
+    color: #dc2626;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+
+  @media(max-width: 700px) {
+    .settings-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 800px;">
-  <div class="card-header">
-    <div class="card-title">Environment Information</div>
+<div class="settings-page">
+
+  <div class="settings-header">
+    <div>
+      <h2>System Settings</h2>
+      <p>Environment, storage, resources and account information.</p>
+    </div>
+
+    <button type="button" id="settings-refresh" class="settings-btn">
+      ↻ Refresh Information
+    </button>
   </div>
-  <table class="data-table">
-    <tbody>
-      <tr>
-        <td style="font-weight: 600; width: 200px;">Host Platform</td>
-        <td>WSL2 (Ubuntu Linux)</td>
-      </tr>
-      <tr>
-        <td style="font-weight: 600;">Framework</td>
-        <td>Flask (Python 3.14)</td>
-      </tr>
-      <tr>
-        <td style="font-weight: 600;">Storage Engine</td>
-        <td>SQLite 3 (Normalized DBMS)</td>
-      </tr>
-      <tr>
-        <td style="font-weight: 600;">Process Supervisor</td>
-        <td>POSIX Process Groups (setsid, SIGTERM, SIGKILL)</td>
-      </tr>
-      <tr>
-        <td style="font-weight: 600;">Resource Monitor</td>
-        <td>psutil (/proc CPU &amp; Memory Telemetry)</td>
-      </tr>
-    </tbody>
-  </table>
+
+  <div class="settings-grid">
+
+    <!-- Environment -->
+    <section class="settings-card">
+      <h3>Environment Information</h3>
+
+      <div class="settings-row">
+        <span class="settings-label">Host Platform</span>
+        <span class="settings-value">WSL2 / Ubuntu Linux</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Framework</span>
+        <span class="settings-value">Flask</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Programming Language</span>
+        <span class="settings-value">Python</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Database</span>
+        <span class="settings-value">SQLite 3</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Process Isolation</span>
+        <span class="settings-value">Bubblewrap</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Resource Monitoring</span>
+        <span class="settings-value">psutil</span>
+      </div>
+    </section>
+
+    <!-- Storage -->
+    <section class="settings-card">
+      <h3>Storage & Portability</h3>
+
+      <div class="settings-row">
+        <span class="settings-label">Storage Mode</span>
+        <span class="settings-value">Portable USB Storage</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Configured Storage</span>
+        <span class="settings-value" id="storage-path">Checking...</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Storage Availability</span>
+        <span class="settings-value" id="storage-status">Checking...</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Database Engine</span>
+        <span class="settings-value">SQLite</span>
+      </div>
+
+      <p class="settings-note">
+        Storage configuration is read-only. This page does not modify
+        your USB drive or personal files.
+      </p>
+    </section>
+
+    <!-- Resources -->
+    <section class="settings-card">
+      <h3>System Resources</h3>
+
+      <div class="resource-item">
+        <div class="resource-heading">
+          <span>CPU Usage</span>
+          <strong id="settings-cpu">—</strong>
+        </div>
+        <div class="resource-track">
+          <div class="resource-fill" id="settings-cpu-bar"></div>
+        </div>
+      </div>
+
+      <div class="resource-item">
+        <div class="resource-heading">
+          <span>Memory Usage</span>
+          <strong id="settings-memory">—</strong>
+        </div>
+        <div class="resource-track">
+          <div class="resource-fill" id="settings-memory-bar"></div>
+        </div>
+      </div>
+
+      <div class="resource-item">
+        <div class="resource-heading">
+          <span>Disk Usage</span>
+          <strong id="settings-disk">—</strong>
+        </div>
+        <div class="resource-track">
+          <div class="resource-fill" id="settings-disk-bar"></div>
+        </div>
+      </div>
+
+      <p class="settings-note" id="settings-resource-updated">
+        Waiting for system information...
+      </p>
+
+      <p class="settings-error" id="settings-resource-error" hidden></p>
+    </section>
+
+    <!-- Account -->
+    <section class="settings-card">
+      <h3>Account Information</h3>
+
+      <div class="settings-row">
+        <span class="settings-label">Username</span>
+        <span class="settings-value" id="settings-username">Loading...</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">User ID</span>
+        <span class="settings-value" id="settings-user-id">—</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Account Role</span>
+        <span class="settings-value" id="settings-role">—</span>
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Session Status</span>
+        <span class="settings-status" id="settings-session">Checking...</span>
+      </div>
+
+      <p class="settings-note">
+        Account information is retrieved from the current authenticated session.
+      </p>
+    </section>
+
+  </div>
+
+  <p class="settings-note" id="settings-last-updated">
+    Settings information has not been refreshed yet.
+  </p>
+
 </div>
+
+<script>
+  (() => {
+    "use strict";
+
+    const $ = id => document.getElementById(id);
+
+    function setResource(id, barId, value, suffix = "%") {
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        $(id).textContent = "Unavailable";
+        $(barId).style.width = "0%";
+        return;
+      }
+
+      const safeValue = Math.max(0, Math.min(100, numericValue));
+
+      $(id).textContent = safeValue.toFixed(1) + suffix;
+      $(barId).style.width = safeValue + "%";
+    }
+
+    async function loadAccount() {
+      try {
+        const response = await api.get("/api/auth/me");
+        const user = response?.data?.user;
+
+        if (!user) {
+          throw new Error("Account information unavailable.");
+        }
+
+        $("settings-username").textContent =
+          user.username || user.name || "Unknown";
+
+        $("settings-user-id").textContent = user.id ?? "—";
+
+        $("settings-role").textContent =
+          String(user.role || "USER").toUpperCase();
+
+        $("settings-session").textContent = "Authenticated";
+
+      } catch (error) {
+        $("settings-username").textContent = "Unavailable";
+        $("settings-session").textContent = "Unavailable";
+        console.error("Account information error:", error);
+      }
+    }
+
+    async function loadSystemResources() {
+      $("settings-resource-error").hidden = true;
+
+      try {
+        const response = await api.get("/api/system/stats");
+        const stats = response?.data;
+
+        if (!stats) {
+          throw new Error("System statistics unavailable.");
+        }
+
+        setResource(
+          "settings-cpu",
+          "settings-cpu-bar",
+          stats.cpu_percent
+        );
+
+        setResource(
+          "settings-memory",
+          "settings-memory-bar",
+          stats.memory_percent
+        );
+
+        setResource(
+          "settings-disk",
+          "settings-disk-bar",
+          stats.disk_percent
+        );
+
+        $("settings-resource-updated").textContent =
+          "Updated at " + new Date().toLocaleTimeString();
+
+      } catch (error) {
+        $("settings-resource-error").textContent = error.message;
+        $("settings-resource-error").hidden = false;
+      }
+    }
+
+    async function loadStorageInformation() {
+      // Use the existing deployment configuration as a
+      // read-only reference. Do not probe or modify the USB here.
+      $("storage-path").textContent = "Configured by SANDBOX_DATA_ROOT";
+      $("storage-status").textContent =
+        "Validated during application startup";
+    }
+
+    async function refreshSettings() {
+      const button = $("settings-refresh");
+
+      button.disabled = true;
+      button.textContent = "Refreshing...";
+
+      try {
+        await Promise.all([
+          loadAccount(),
+          loadSystemResources(),
+          loadStorageInformation()
+        ]);
+
+        $("settings-last-updated").textContent =
+          "Last refreshed: " + new Date().toLocaleString();
+
+      } finally {
+        button.disabled = false;
+        button.textContent = "↻ Refresh Information";
+      }
+    }
+
+    $("settings-refresh").addEventListener("click", refreshSettings);
+
+    refreshSettings();
+  })();
+</script>
 {% endblock %}

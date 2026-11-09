@@ -1,11 +1,6 @@
-"""
-REST API Blueprint for Portable Sandbox Management System.
-Connects the Flask web tier to the underlying SQLite DBMS layer (app.database)
-and the OS Process Supervisor Engine (app.sandbox, app.monitor).
-"""
-
 import sqlite3
 from typing import Any, Dict, Optional
+from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, request, session
 
 from app.auth import (
@@ -44,11 +39,6 @@ from app.sandbox import (
 )
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
-
-
-# ==========================================
-# RESPONSE HELPERS
-# ==========================================
 
 def json_success(data: Any = None, message: Optional[str] = None, status_code: int = 200):
     """Formats standardized successful JSON response."""
@@ -363,6 +353,13 @@ def execute_command_endpoint(sandbox_id: int):
     is_async = data.get("async", True)
     enable_monitoring = data.get("enable_monitoring", True)
     timeout = data.get("timeout")
+    print("\n========== EXECUTION DEBUG ==========")
+    print("Sandbox ID:", sandbox_id)
+    print("Command:", repr(command))
+    print("Async:", repr(is_async))
+    print("Monitoring:", repr(enable_monitoring))
+    print("Timeout:", repr(timeout))
+    print("=====================================\n")
 
     if not command:
         return json_error("Command field is required.", "INVALID_INPUT", 400)
@@ -377,6 +374,17 @@ def execute_command_endpoint(sandbox_id: int):
                 working_dir=sandbox["working_dir"],
                 enable_monitoring=enable_monitoring,
                 db_path=db_path
+            )
+            print("[LIFECYCLE] Immediately after spawn:", proc.poll(), flush=True)
+
+            import time
+            time.sleep(3)
+
+            print("[LIFECYCLE] After 3 seconds:", proc.poll(), flush=True)
+            print(
+            f"[SPAWN DEBUG] run={run_id}, pid={proc.pid}, "
+            f"poll={proc.poll()}, alive={proc.poll() is None}",
+            flush=True
             )
             return json_success(
                 data={
@@ -418,18 +426,36 @@ def get_execution_endpoint(run_id: int):
 
     # Check if active process completed naturally in background
     proc = registry.get_process(run_id)
+
+    print(
+    f"[POLL DEBUG] run={run_id}, "
+    f"proc_exists={proc is not None}, "
+    f"poll={proc.poll() if proc else 'NO PROCESS'}, "
+    f"db_status={run_record['status']}",
+    flush=True
+    )
+
     if proc and proc.poll() is not None and run_record["status"] == "RUNNING":
         out, err_stream = proc.communicate()
         exit_code = proc.returncode
         status_str = "COMPLETED" if exit_code == 0 else "FAILED"
+
+        monitor = registry.get_monitor(run_id)
+        if monitor is not None:
+            monitor.stop(timeout=2.0)
+
+        end_iso = datetime.now(timezone.utc).isoformat()
+
         update_execution_run(
             run_id=run_id,
             status=status_str,
             exit_code=exit_code,
             stdout=out or "",
             stderr=err_stream or "",
+            end_time=end_iso,
             db_path=db_path
         )
+
         registry.unregister(run_id)
         run_record = get_execution_run_by_id(run_id, db_path=db_path)
 

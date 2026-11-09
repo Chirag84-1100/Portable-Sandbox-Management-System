@@ -1,12 +1,416 @@
 {% extends "base.html" %}
 
 {% block title %}Activity Logs{% endblock %}
-{% block page_title %}Audit Trail & Activity Logs{% endblock %}
+{% block page_heading %}Audit Trail & Activity Logs{% endblock %}
+
+{% block extra_css %}
+<style>
+  .activity-page {
+    display: grid;
+    gap: 20px;
+  }
+
+  .activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .activity-header p {
+    margin-top: 5px;
+  }
+
+  .activity-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .activity-btn {
+    padding: 10px 15px;
+    border: 1px solid var(--border-gray);
+    border-radius: 9px;
+    background: white;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+  }
+
+  .activity-btn.primary {
+    background: var(--primary-purple);
+    color: white;
+    border-color: var(--primary-purple);
+  }
+
+  .activity-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 15px;
+  }
+
+  .activity-stat {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .activity-stat strong {
+    display: block;
+    font-size: 25px;
+    margin-top: 7px;
+  }
+
+  .activity-stat span {
+    color: var(--text-gray);
+    font-size: 13px;
+  }
+
+  .activity-card {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .activity-card-header {
+    padding: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .activity-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 15px 18px;
+  }
+
+  .activity-input {
+    min-width: 180px;
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border-gray);
+    border-radius: 8px;
+    font: inherit;
+    background: white;
+  }
+
+  .activity-table-wrap {
+    overflow-x: auto;
+  }
+
+  .activity-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .activity-table th,
+  .activity-table td {
+    padding: 14px 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 13px;
+    vertical-align: top;
+  }
+
+  .activity-table th {
+    color: var(--text-gray);
+    background: var(--bg-subtle);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .activity-table td:first-child {
+    font-weight: 600;
+  }
+
+  .activity-action {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 20px;
+    background: var(--primary-purple-light);
+    color: var(--primary-purple);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .activity-muted {
+    color: var(--text-gray);
+  }
+
+  .activity-state {
+    padding: 35px 18px;
+    text-align: center;
+    color: var(--text-gray);
+  }
+
+  .activity-footer {
+    padding: 13px 18px;
+    color: var(--text-gray);
+    font-size: 12px;
+  }
+
+  @media(max-width:650px) {
+    .activity-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 11px;
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="card empty-state">
-  <div class="empty-state-icon">??</div>
-  <div class="empty-state-title">Audit Log Viewer</div>
-  <p>Scheduled for Stage 6 implementation.</p>
+<div class="activity-page">
+
+  <div class="activity-header">
+    <div>
+      <h2>Audit Trail</h2>
+      <p>Track actions and events performed in your sandbox environment.</p>
+    </div>
+    <div class="activity-actions">
+      <button class="activity-btn" id="activity-refresh" type="button">
+        ↻ Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="activity-stats">
+    <div class="activity-stat">
+      <span>Loaded activities</span>
+      <strong id="activity-total">—</strong>
+    </div>
+    <div class="activity-stat">
+      <span>Login events</span>
+      <strong id="activity-logins">—</strong>
+    </div>
+    <div class="activity-stat">
+      <span>Process events</span>
+      <strong id="activity-processes">—</strong>
+    </div>
+  </div>
+
+  <section class="activity-card">
+    <div class="activity-card-header">
+      <h3>Recent Activity</h3>
+      <span class="activity-muted" id="activity-updated">Not loaded yet</span>
+    </div>
+
+    <div class="activity-filters">
+      <input id="activity-search" class="activity-input" type="search" placeholder="Search actions or details..."
+        aria-label="Search activity logs">
+
+      <select id="activity-filter" class="activity-input" aria-label="Filter activity type">
+        <option value="all">All activity types</option>
+      </select>
+    </div>
+
+    <div id="activity-state" class="activity-state" role="status">
+      Loading activity records...
+    </div>
+
+    <div class="activity-table-wrap" id="activity-table-wrap" hidden>
+      <table class="activity-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Details</th>
+            <th>User ID</th>
+            <th>Date & Time</th>
+          </tr>
+        </thead>
+        <tbody id="activity-table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="activity-footer" id="activity-count"></div>
+  </section>
+
 </div>
+
+<script>
+  (() => {
+    "use strict";
+
+    const state = {
+      records: [],
+      loading: false
+    };
+
+    const elements = {
+      total: document.getElementById("activity-total"),
+      logins: document.getElementById("activity-logins"),
+      processes: document.getElementById("activity-processes"),
+      search: document.getElementById("activity-search"),
+      filter: document.getElementById("activity-filter"),
+      body: document.getElementById("activity-table-body"),
+      table: document.getElementById("activity-table-wrap"),
+      message: document.getElementById("activity-state"),
+      count: document.getElementById("activity-count"),
+      updated: document.getElementById("activity-updated"),
+      refresh: document.getElementById("activity-refresh")
+    };
+
+    function formatDate(value) {
+      if (!value) return "—";
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) return String(value);
+
+      return date.toLocaleString();
+    }
+
+    function renderStats() {
+      elements.total.textContent = state.records.length;
+
+      elements.logins.textContent = state.records.filter(
+        record => String(record.action || "").includes("LOGIN")
+      ).length;
+
+      elements.processes.textContent = state.records.filter(
+        record => String(record.action || "").includes("PROCESS")
+      ).length;
+    }
+
+    function populateFilters() {
+      const selected = elements.filter.value || "all";
+
+      const actions = [...new Set(
+        state.records.map(record => record.action).filter(Boolean)
+      )].sort();
+
+      elements.filter.innerHTML =
+        '<option value="all">All activity types</option>';
+
+      actions.forEach(action => {
+        const option = document.createElement("option");
+        option.value = action;
+        option.textContent = action;
+        elements.filter.appendChild(option);
+      });
+
+      if (actions.includes(selected)) {
+        elements.filter.value = selected;
+      }
+    }
+
+    function renderTable() {
+      const query = elements.search.value.trim().toLowerCase();
+      const selectedAction = elements.filter.value;
+
+      const filtered = state.records.filter(record => {
+        const action = String(record.action || "");
+        const details = String(record.details || "");
+
+        const matchesSearch =
+          action.toLowerCase().includes(query) ||
+          details.toLowerCase().includes(query) ||
+          String(record.user_id ?? "").includes(query);
+
+        const matchesAction =
+          selectedAction === "all" || action === selectedAction;
+
+        return matchesSearch && matchesAction;
+      });
+
+      elements.body.replaceChildren();
+
+      if (!filtered.length) {
+        elements.table.hidden = true;
+        elements.message.hidden = false;
+        elements.message.textContent = state.records.length
+          ? "No activities match your filters."
+          : "No activity records found.";
+
+        elements.count.textContent = "0 records displayed";
+        return;
+      }
+
+      elements.message.hidden = true;
+      elements.table.hidden = false;
+
+      filtered.forEach(record => {
+        const row = document.createElement("tr");
+
+        const actionCell = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "activity-action";
+        badge.textContent = record.action || "UNKNOWN";
+        actionCell.appendChild(badge);
+
+        const detailsCell = document.createElement("td");
+        detailsCell.textContent = record.details || "—";
+
+        const userCell = document.createElement("td");
+        userCell.textContent = record.user_id ?? "System";
+
+        const dateCell = document.createElement("td");
+        dateCell.textContent = formatDate(record.timestamp);
+
+        row.append(actionCell, detailsCell, userCell, dateCell);
+        elements.body.appendChild(row);
+      });
+
+      elements.count.textContent =
+        `Showing ${filtered.length} of ${state.records.length} loaded records`;
+    }
+
+    async function loadActivities() {
+      if (state.loading) return;
+
+      state.loading = true;
+      elements.refresh.disabled = true;
+      elements.refresh.textContent = "Loading...";
+      elements.message.hidden = false;
+      elements.table.hidden = true;
+      elements.message.textContent = "Loading activity records...";
+
+      try {
+        const response = await api.get("/api/activity?limit=100");
+
+        if (!Array.isArray(response.data)) {
+          throw new Error("Unexpected activity API response.");
+        }
+
+        state.records = response.data;
+
+        populateFilters();
+        renderStats();
+        renderTable();
+
+        elements.updated.textContent =
+          "Updated " + new Date().toLocaleTimeString();
+
+      } catch (error) {
+        elements.message.hidden = false;
+        elements.message.textContent = error.message;
+        elements.count.textContent = "";
+        api.showToast(error.message, "error");
+
+      } finally {
+        state.loading = false;
+        elements.refresh.disabled = false;
+        elements.refresh.textContent = "↻ Refresh";
+      }
+    }
+
+    elements.search.addEventListener("input", renderTable);
+    elements.filter.addEventListener("change", renderTable);
+    elements.refresh.addEventListener("click", loadActivities);
+
+    loadActivities();
+  })();
+</script>
 {% endblock %}
