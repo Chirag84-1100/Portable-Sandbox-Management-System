@@ -108,12 +108,7 @@ from app.os_lab.synchronization import BoundedBuffer
 from app.os_lab.ipc import pipe_communication
 from app.dbms_lab.demonstrations import (
     create_demo_database,
-    demonstrate_joins,
-    demonstrate_aggregation,
-    demonstrate_view,
-    demonstrate_index,
-    demonstrate_transaction_rollback,
-    demonstrate_constraints,
+    execute_dbms_demonstration,
 )
 
 
@@ -219,102 +214,9 @@ def dbms_lab_page():
         db = None
 
         try:
-            db = create_demo_database()
-
-            if selected_module == "design":
-                result = [
-                    dict(row) for row in db.execute(
-                        "SELECT name, type FROM sqlite_master "
-                        "WHERE type IN ('table', 'view') ORDER BY type, name"
-                    )
-                ]
-
-            elif selected_module == "crud":
-                db.execute(
-                    "INSERT INTO employees VALUES (105, 'Demo User', 45000, 1)"
-                )
-                db.execute(
-                    "UPDATE employees SET salary = 48000 WHERE employee_id = 105"
-                )
-                inserted = dict(db.execute(
-                    "SELECT * FROM employees WHERE employee_id = 105"
-                ).fetchone())
-                db.execute("DELETE FROM employees WHERE employee_id = 105")
-                result = {
-                    "after_insert_and_update": inserted,
-                    "deleted_successfully": db.execute(
-                        "SELECT COUNT(*) FROM employees WHERE employee_id = 105"
-                    ).fetchone()[0] == 0,
-                }
-
-            elif selected_module == "queries":
-                result = [
-                    dict(row) for row in db.execute(
-                        "SELECT employee_name, salary FROM employees "
-                        "WHERE salary >= 50000 ORDER BY salary DESC"
-                    )
-                ]
-
-            elif selected_module == "joins":
-                result = demonstrate_joins(db)
-
-            elif selected_module == "constraints":
-                result = demonstrate_constraints(db)
-
-            elif selected_module == "transactions":
-                result = {
-                    "rollback_successful":
-                        demonstrate_transaction_rollback(db)
-                }
-
-            elif selected_module == "indexes":
-                result = demonstrate_index(db)
-
-            elif selected_module == "views_triggers":
-                view_result = demonstrate_view(db)
-
-                db.execute("""
-                    CREATE TABLE salary_audit (
-                        employee_id INTEGER,
-                        old_salary REAL,
-                        new_salary REAL
-                    )
-                """)
-
-                db.execute("""
-                    CREATE TRIGGER salary_update_audit
-                    AFTER UPDATE OF salary ON employees
-                    BEGIN
-                        INSERT INTO salary_audit
-                        VALUES (OLD.employee_id, OLD.salary, NEW.salary);
-                    END
-                """)
-
-                db.execute(
-                    "UPDATE employees SET salary = 52000 "
-                    "WHERE employee_id = 101"
-                )
-
-                audit = [
-                    dict(row) for row in db.execute(
-                        "SELECT * FROM salary_audit"
-                    )
-                ]
-
-                result = {
-                    "view": view_result,
-                    "trigger_audit": audit,
-                }
-
-            else:
-                raise ValueError("Select a valid DBMS demonstration.")
-
+            result = execute_dbms_demonstration(selected_module)
         except Exception as exc:
             error = str(exc)
-
-        finally:
-            if db is not None:
-                db.close()
 
     return render_template(
         "dbms_lab.html",
