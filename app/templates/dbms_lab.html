@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}DBMS Lab - Portable Sandbox{% endblock %}
+{% block page_heading %}Database Management Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>DBMS Lab</h1>
+    <p>Interactive SQL and database demonstrations using SQLite.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>1. Database Design and Normalization</h2>
+  <p>Relational tables, primary keys and foreign keys.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="design">
+    <button class="btn btn-primary" type="submit">Show Database Schema</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>2. CRUD Operations</h2>
+  <p>INSERT, SELECT, UPDATE and DELETE.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="crud">
+    <button class="btn btn-primary" type="submit">Run CRUD</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>3. SQL Queries and Aggregation</h2>
+  <p>SELECT, WHERE, ORDER BY, GROUP BY, COUNT and AVG.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="queries">
+    <button class="btn btn-primary" type="submit">Run SQL Queries</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>4. SQL Joins</h2>
+  <p>INNER JOIN between Employees and Departments.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="joins">
+    <button class="btn btn-primary" type="submit">Run JOIN</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>5. Database Constraints</h2>
+  <p>CHECK constraints and invalid data rejection.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="constraints">
+    <button class="btn btn-primary" type="submit">Test Constraints</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>6. Transactions</h2>
+  <p>COMMIT and ROLLBACK concepts.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="transactions">
+    <button class="btn btn-primary" type="submit">Test Rollback</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>7. Database Indexing</h2>
+  <p>Inspect indexes created on the Employees table.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="indexes">
+    <button class="btn btn-primary" type="submit">Show Indexes</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>8. Views and Triggers</h2>
+  <p>Display a database view and demonstrate an audit trigger.</p>
+  <form method="POST">
+    <input type="hidden" name="module" value="views_triggers">
+    <button class="btn btn-primary" type="submit">Run View and Trigger</button>
+  </form>
+</section>
+
+{% if error %}
+<section class="card">
+  <h2>Execution Error</h2>
+  <pre>{{ error }}</pre>
+</section>
+{% endif %}
+
+{% if result is not none %}
+<section class="card">
+  <h2>Query Result</h2>
+  <pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ result | tojson(indent=2) }}</pre>
+</section>
+{% endif %}
+{% endblock %}

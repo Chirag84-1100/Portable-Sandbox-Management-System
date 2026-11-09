@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Sandbox Details{% endblock %}
+{% block page_title %}Sandbox Workspace #{{ sandbox_id }}{% endblock %}
+
+{% block content %}
+<div class="card empty-state">
+  <div class="empty-state-icon">??</div>
+  <div class="empty-state-title">Execution Terminal</div>
+  <p>Scheduled for Stage 4 implementation.</p>
+</div>
+{% endblock %}

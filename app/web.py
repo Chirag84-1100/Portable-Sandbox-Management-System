@@ -91,3 +91,235 @@ def activity_page():
 def settings_page():
     """Renders system configuration and environment settings view."""
     return render_template("settings.html", active_nav="settings")
+
+# =========================
+# OS LAB AND DBMS LAB ROUTES
+# =========================
+
+import json
+from threading import Thread
+from flask import request
+
+from app.os_lab.scheduling import fcfs, sjf, round_robin
+from app.os_lab.scheduling import validate_processes
+from app.os_lab.memory import allocate_memory
+from app.os_lab.deadlock import bankers_algorithm
+from app.os_lab.synchronization import BoundedBuffer
+from app.os_lab.ipc import pipe_communication
+from app.dbms_lab.demonstrations import (
+    create_demo_database,
+    demonstrate_joins,
+    demonstrate_aggregation,
+    demonstrate_view,
+    demonstrate_index,
+    demonstrate_transaction_rollback,
+    demonstrate_constraints,
+)
+
+
+@web_bp.route("/os-lab", methods=["GET", "POST"])
+@web_login_required
+def os_lab_page():
+    result = None
+    error = None
+    selected_module = ""
+    input_json = ""
+
+    if request.method == "POST":
+        selected_module = request.form.get("module", "")
+        input_json = request.form.get("payload", "")
+
+        try:
+            data = json.loads(input_json or "{}")
+
+            if selected_module == "scheduling":
+                validate_processes(data["processes"])
+                algorithm = data.get("algorithm", "fcfs")
+
+                if algorithm == "fcfs":
+                    result = fcfs(data["processes"])
+                elif algorithm == "sjf":
+                    result = sjf(data["processes"])
+                elif algorithm == "round_robin":
+                    result = round_robin(
+                        data["processes"], int(data.get("quantum", 2))
+                    )
+                else:
+                    raise ValueError("Unknown scheduling algorithm.")
+
+            elif selected_module == "memory":
+                result = allocate_memory(
+                    data["blocks"],
+                    data["processes"],
+                    data.get("strategy", "first_fit"),
+                )
+
+            elif selected_module == "deadlock":
+                result = bankers_algorithm(
+                    data["available"],
+                    data["allocation"],
+                    data["maximum"],
+                )
+
+            elif selected_module == "synchronization":
+                buffer = BoundedBuffer(int(data.get("capacity", 3)))
+                items = data.get("items", [1, 2, 3, 4, 5])
+                consumed = []
+
+                def producer():
+                    for item in items:
+                        buffer.produce(item)
+
+                def consumer():
+                    for _ in items:
+                        consumed.append(buffer.consume())
+
+                p = Thread(target=producer)
+                c = Thread(target=consumer)
+                p.start()
+                c.start()
+                p.join()
+                c.join()
+
+                result = {
+                    "consumed_items": consumed,
+                    "buffer_status": buffer.get_status(),
+                }
+
+            elif selected_module == "ipc":
+                result = pipe_communication(
+                    str(data.get("message", "Hello from Parent Process!"))
+                )
+
+            else:
+                raise ValueError("Select a valid OS demonstration.")
+
+        except Exception as exc:
+            error = str(exc)
+
+    return render_template(
+        "os_lab.html",
+        active_nav="os_lab",
+        result=result,
+        error=error,
+        selected_module=selected_module,
+        input_json=input_json,
+    )
+
+
+@web_bp.route("/dbms-lab", methods=["GET", "POST"])
+@web_login_required
+def dbms_lab_page():
+    result = None
+    error = None
+    selected_module = ""
+
+    if request.method == "POST":
+        selected_module = request.form.get("module", "")
+        db = None
+
+        try:
+            db = create_demo_database()
+
+            if selected_module == "design":
+                result = [
+                    dict(row) for row in db.execute(
+                        "SELECT name, type FROM sqlite_master "
+                        "WHERE type IN ('table', 'view') ORDER BY type, name"
+                    )
+                ]
+
+            elif selected_module == "crud":
+                db.execute(
+                    "INSERT INTO employees VALUES (105, 'Demo User', 45000, 1)"
+                )
+                db.execute(
+                    "UPDATE employees SET salary = 48000 WHERE employee_id = 105"
+                )
+                inserted = dict(db.execute(
+                    "SELECT * FROM employees WHERE employee_id = 105"
+                ).fetchone())
+                db.execute("DELETE FROM employees WHERE employee_id = 105")
+                result = {
+                    "after_insert_and_update": inserted,
+                    "deleted_successfully": db.execute(
+                        "SELECT COUNT(*) FROM employees WHERE employee_id = 105"
+                    ).fetchone()[0] == 0,
+                }
+
+            elif selected_module == "queries":
+                result = [
+                    dict(row) for row in db.execute(
+                        "SELECT employee_name, salary FROM employees "
+                        "WHERE salary >= 50000 ORDER BY salary DESC"
+                    )
+                ]
+
+            elif selected_module == "joins":
+                result = demonstrate_joins(db)
+
+            elif selected_module == "constraints":
+                result = demonstrate_constraints(db)
+
+            elif selected_module == "transactions":
+                result = {
+                    "rollback_successful":
+                        demonstrate_transaction_rollback(db)
+                }
+
+            elif selected_module == "indexes":
+                result = demonstrate_index(db)
+
+            elif selected_module == "views_triggers":
+                view_result = demonstrate_view(db)
+
+                db.execute("""
+                    CREATE TABLE salary_audit (
+                        employee_id INTEGER,
+                        old_salary REAL,
+                        new_salary REAL
+                    )
+                """)
+
+                db.execute("""
+                    CREATE TRIGGER salary_update_audit
+                    AFTER UPDATE OF salary ON employees
+                    BEGIN
+                        INSERT INTO salary_audit
+                        VALUES (OLD.employee_id, OLD.salary, NEW.salary);
+                    END
+                """)
+
+                db.execute(
+                    "UPDATE employees SET salary = 52000 "
+                    "WHERE employee_id = 101"
+                )
+
+                audit = [
+                    dict(row) for row in db.execute(
+                        "SELECT * FROM salary_audit"
+                    )
+                ]
+
+                result = {
+                    "view": view_result,
+                    "trigger_audit": audit,
+                }
+
+            else:
+                raise ValueError("Select a valid DBMS demonstration.")
+
+        except Exception as exc:
+            error = str(exc)
+
+        finally:
+            if db is not None:
+                db.close()
+
+    return render_template(
+        "dbms_lab.html",
+        active_nav="dbms_lab",
+        result=result,
+        error=error,
+        selected_module=selected_module,
+    )

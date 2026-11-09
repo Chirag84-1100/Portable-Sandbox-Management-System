@@ -1,12 +1,562 @@
 {% extends "base.html" %}
 
-{% block title %}Sandbox Details{% endblock %}
-{% block page_title %}Sandbox Workspace #{{ sandbox_id }}{% endblock %}
+{% block title %}Sandbox Workspace{% endblock %}
+{% block page_title %}Sandbox Workspace{% endblock %}
 
 {% block content %}
-<div class="card empty-state">
-  <div class="empty-state-icon">??</div>
-  <div class="empty-state-title">Execution Terminal</div>
-  <p>Scheduled for Stage 4 implementation.</p>
+<style>
+.workspace { display: grid; gap: 20px; }
+.workspace-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.workspace-card { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #ddd); border-radius: 12px; padding: 20px; min-width: 0; }
+.workspace-card h3 { margin: 0 0 16px; }
+.info-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.info-item small { display: block; color: var(--text-muted, #777); margin-bottom: 5px; }
+.info-item strong { overflow-wrap: anywhere; }
+.terminal-input { display: flex; gap: 10px; margin: 12px 0; }
+.terminal-input input { flex: 1; min-width: 0; }
+.workspace input, .workspace button { padding: 10px 12px; border-radius: 7px; }
+.workspace input { border: 1px solid var(--border-color, #ccc); background: var(--input-bg, #fff); color: inherit; }
+.workspace button { border: 0; cursor: pointer; }
+.primary-btn { background: var(--primary-color, #2563eb); color: white; }
+.danger-btn { background: #dc2626; color: white; }
+.secondary-btn { background: var(--border-color, #e5e7eb); color: inherit; }
+.workspace button:disabled { opacity: .5; cursor: not-allowed; }
+.terminal-output { background: #111827; color: #d1fae5; padding: 14px; border-radius: 8px; min-height: 90px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; }
+.output-label { margin: 14px 0 7px; font-weight: 600; }
+.status-pill { display: inline-block; padding: 5px 10px; border-radius: 20px; background: #e5e7eb; font-size: 12px; }
+.status-running { background: #dbeafe; color: #1d4ed8; }
+.status-completed { background: #dcfce7; color: #166534; }
+.status-failed { background: #fee2e2; color: #991b1b; }
+.workspace-table-wrap { overflow-x: auto; }
+.workspace table { width: 100%; border-collapse: collapse; min-width: 600px; }
+.workspace th, .workspace td { padding: 11px; border-bottom: 1px solid var(--border-color, #ddd); text-align: left; font-size: 13px; }
+.workspace th { color: var(--text-muted, #777); }
+.history-view { color: var(--primary-color, #2563eb); background: transparent; padding: 4px !important; }
+.metric-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.metric-box { padding: 14px; border-radius: 9px; background: var(--secondary-bg, #f3f4f6); }
+.metric-box small { display: block; color: var(--text-muted, #777); }
+.metric-box strong { display: block; margin-top: 7px; font-size: 20px; }
+.muted { color: var(--text-muted, #777); font-size: 13px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+.checkbox-row input { width: auto; }
+@media(max-width:800px) {
+  .workspace-grid { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:480px) {
+  .terminal-input { flex-direction: column; }
+  .info-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="workspace">
+
+  <!-- Sandbox information -->
+  <section class="workspace-card">
+    <h3>Sandbox Information</h3>
+    <div class="info-grid">
+      <div class="info-item">
+        <small>Sandbox Name</small>
+        <strong id="sandbox-name">Loading...</strong>
+      </div>
+      <div class="info-item">
+        <small>Sandbox ID</small>
+        <strong id="sandbox-id">{{ sandbox_id }}</strong>
+      </div>
+      <div class="info-item">
+        <small>Description</small>
+        <strong id="sandbox-description">Loading...</strong>
+      </div>
+      <div class="info-item">
+        <small>Working Directory</small>
+        <strong id="sandbox-directory">Loading...</strong>
+      </div>
+    </div>
+    <p class="muted" id="sandbox-message">Loading sandbox information...</p>
+  </section>
+
+  <!-- Command terminal -->
+  <section class="workspace-card">
+    <h3>Execution Terminal</h3>
+    <p class="muted">Enter a command to execute inside this sandbox.</p>
+
+    <form id="execute-form">
+      <div class="terminal-input">
+        <input id="command-input" type="text"
+          placeholder="Example: echo Hello Sandbox"
+          autocomplete="off" required>
+        <button class="primary-btn" id="execute-btn" type="submit">
+          Run Command
+        </button>
+      </div>
+
+      <label class="checkbox-row">
+        <input id="monitoring-enabled" type="checkbox" checked>
+        Enable resource monitoring
+      </label>
+    </form>
+
+    <p class="muted" id="execution-message">No command executed yet.</p>
+  </section>
+
+  <!-- Current execution -->
+  <section class="workspace-card">
+    <h3>Process Status</h3>
+
+    <div class="info-grid">
+      <div class="info-item">
+        <small>Run ID</small>
+        <strong id="run-id">—</strong>
+      </div>
+      <div class="info-item">
+        <small>Process ID</small>
+        <strong id="process-id">—</strong>
+      </div>
+      <div class="info-item">
+        <small>Status</small>
+        <span id="execution-status" class="status-pill">NOT STARTED</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+      <button class="secondary-btn" id="refresh-execution-btn" type="button">
+        Refresh Status
+      </button>
+      <button class="danger-btn" id="stop-execution-btn" type="button" disabled>
+        Stop Process
+      </button>
+    </div>
+
+    <div class="output-label">Standard Output</div>
+    <pre class="terminal-output" id="stdout-output">No output yet.</pre>
+
+    <div class="output-label">Standard Error</div>
+    <pre class="terminal-output" id="stderr-output">No errors.</pre>
+  </section>
+
+  <!-- Resource monitoring -->
+  <section class="workspace-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h3>Resource Monitoring</h3>
+      <button class="secondary-btn" id="refresh-metrics-btn" type="button">
+        Refresh Metrics
+      </button>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-box">
+        <small>CPU Average</small>
+        <strong id="metric-cpu">—</strong>
+      </div>
+      <div class="metric-box">
+        <small>Average Memory</small>
+        <strong id="metric-memory">—</strong>
+      </div>
+      <div class="metric-box">
+        <small>Peak Memory</small>
+        <strong id="metric-peak-memory">—</strong>
+      </div>
+      <div class="metric-box">
+        <small>Samples</small>
+        <strong id="metric-samples">0</strong>
+      </div>
+    </div>
+
+    <p class="muted" id="metrics-message" style="margin-top:12px;">
+      Execute a command to collect metrics.
+    </p>
+
+    <div class="workspace-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>CPU (%)</th>
+            <th>Memory (MB)</th>
+            <th>Threads</th>
+          </tr>
+        </thead>
+        <tbody id="metrics-table">
+          <tr><td colspan="4">No metrics available.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Execution history -->
+  <section class="workspace-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h3>Execution History</h3>
+      <button class="secondary-btn" id="refresh-history-btn" type="button">
+        Refresh History
+      </button>
+    </div>
+
+    <p class="muted" id="history-message">Loading execution history...</p>
+
+    <div class="workspace-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Command</th>
+            <th>Status</th>
+            <th>Exit Code</th>
+            <th>Started</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="history-table">
+          <tr><td colspan="6">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
 </div>
+
+<script>
+(() => {
+  "use strict";
+
+  const sandboxId = {{ sandbox_id | tojson }};
+  const client = window.api;
+
+  let currentRunId = null;
+  let refreshTimer = null;
+  let historyRuns = [];
+
+  const byId = (id) => document.getElementById(id);
+
+  function setText(id, value) {
+    byId(id).textContent = value == null || value === "" ? "—" : String(value);
+  }
+
+  function unwrap(response) {
+    if (response && Object.prototype.hasOwnProperty.call(response, "data")) {
+      return response.data;
+    }
+    return response;
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  }
+
+  function formatMB(bytes) {
+    const value = Number(bytes);
+    return Number.isFinite(value) ? (value / (1024 * 1024)).toFixed(2) : "—";
+  }
+
+  function setStatus(status) {
+    const element = byId("execution-status");
+    const value = String(status || "UNKNOWN").toUpperCase();
+    element.textContent = value;
+    element.className = "status-pill";
+
+    if (["RUNNING", "PENDING"].includes(value)) {
+      element.classList.add("status-running");
+    } else if (["COMPLETED", "SUCCESS"].includes(value)) {
+      element.classList.add("status-completed");
+    } else if (["FAILED", "ERROR", "STOPPED", "CANCELLED"].includes(value)) {
+      element.classList.add("status-failed");
+    }
+
+    byId("stop-execution-btn").disabled =
+      !["RUNNING", "PENDING"].includes(value);
+  }
+
+  async function loadSandbox() {
+    try {
+      const response = await client.get(
+        `/api/sandboxes/${encodeURIComponent(sandboxId)}`
+      );
+      const sandbox = unwrap(response);
+
+      if (!sandbox) throw new Error("Sandbox details were not returned.");
+
+      setText("sandbox-name", sandbox.name);
+      setText("sandbox-id", sandbox.id ?? sandboxId);
+      setText("sandbox-description", sandbox.description || "No description");
+      setText("sandbox-directory", sandbox.working_dir);
+
+      setText("sandbox-message", "Sandbox information loaded.");
+    } catch (error) {
+      setText("sandbox-message", `Could not load sandbox: ${error.message}`);
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const response = await client.get(
+        `/api/sandboxes/${encodeURIComponent(sandboxId)}/executions?limit=50`
+      );
+
+      const runs = unwrap(response);
+      historyRuns = Array.isArray(runs) ? runs : [];
+
+      const tbody = byId("history-table");
+      tbody.replaceChildren();
+
+      if (!historyRuns.length) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 6;
+        cell.textContent = "No executions found.";
+      } else {
+        historyRuns.forEach((run) => {
+          const row = tbody.insertRow();
+
+          const values = [
+            run.id,
+            run.command,
+            run.status,
+            run.exit_code ?? "—",
+            formatDate(run.start_time || run.created_at)
+          ];
+
+          values.forEach((value) => {
+            const cell = row.insertCell();
+            cell.textContent = value == null ? "—" : String(value);
+          });
+
+          const actionCell = row.insertCell();
+          const button = document.createElement("button");
+          button.className = "history-view";
+          button.type = "button";
+          button.textContent = "View";
+          button.addEventListener("click", () => selectExecution(run.id));
+          actionCell.appendChild(button);
+        });
+      }
+
+      setText("history-message", `Showing ${historyRuns.length} executions.`);
+    } catch (error) {
+      setText("history-message", `Could not load history: ${error.message}`);
+    }
+  }
+
+  async function selectExecution(runId) {
+    currentRunId = runId;
+    setText("run-id", runId);
+    await refreshExecution();
+    await loadMetrics();
+  }
+
+  async function refreshExecution() {
+    if (!currentRunId) {
+      setText("execution-message", "No execution selected.");
+      return;
+    }
+
+    try {
+      const response = await client.get(
+        `/api/executions/${encodeURIComponent(currentRunId)}`
+      );
+
+      const execution = unwrap(response);
+      if (!execution) throw new Error("Execution details were not returned.");
+
+      setText("run-id", execution.run_id ?? execution.id ?? currentRunId);
+      setText("process-id", execution.pid ?? execution.process_id ?? "—");
+      setStatus(execution.status);
+
+      setText(
+        "stdout-output",
+        execution.stdout ?? execution.output ?? "No standard output."
+      );
+      setText(
+        "stderr-output",
+        execution.stderr ?? execution.error_output ?? "No errors."
+      );
+
+      const status = String(execution.status || "").toUpperCase();
+
+      setText("execution-message", `Execution status: ${status || "UNKNOWN"}`);
+
+      if (!["RUNNING", "PENDING"].includes(status)) {
+        stopLiveRefresh();
+        await loadHistory();
+      }
+    } catch (error) {
+      setText("execution-message", `Could not refresh execution: ${error.message}`);
+    }
+  }
+
+  async function loadMetrics() {
+    if (!currentRunId) {
+      setText("metrics-message", "Select or execute a command first.");
+      return;
+    }
+
+    try {
+      const encodedId = encodeURIComponent(currentRunId);
+
+      const [metricsResponse, analyticsResponse] = await Promise.all([
+        client.get(`/api/executions/${encodedId}/metrics`),
+        client.get(`/api/executions/${encodedId}/analytics`)
+      ]);
+
+      const metrics = unwrap(metricsResponse);
+      const analytics = unwrap(analyticsResponse);
+
+      const samples = Array.isArray(metrics) ? metrics : [];
+      const tbody = byId("metrics-table");
+      tbody.replaceChildren();
+
+      if (!samples.length) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 4;
+        cell.textContent = "No resource samples available.";
+      } else {
+        samples.slice(-20).reverse().forEach((metric) => {
+          const row = tbody.insertRow();
+
+          [
+            formatDate(metric.timestamp),
+            Number(metric.cpu_percent || 0).toFixed(2),
+            formatMB(metric.memory_rss_bytes),
+            metric.thread_count ?? "—"
+          ].forEach((value) => {
+            row.insertCell().textContent = String(value);
+          });
+        });
+      }
+
+      if (analytics && typeof analytics === "object") {
+        setText("metric-cpu",
+          analytics.avg_cpu_percent == null
+            ? "—" : `${Number(analytics.avg_cpu_percent).toFixed(2)}%`);
+
+        setText("metric-memory",
+          analytics.avg_rss_mb == null
+            ? "—" : `${Number(analytics.avg_rss_mb).toFixed(2)} MB`);
+
+        setText("metric-peak-memory",
+          analytics.peak_rss_mb == null
+            ? "—" : `${Number(analytics.peak_rss_mb).toFixed(2)} MB`);
+
+        setText("metric-samples", analytics.sample_count ?? samples.length);
+      } else {
+        setText("metric-samples", samples.length);
+      }
+
+      setText("metrics-message",
+        `Loaded ${samples.length} resource samples. Showing the latest ${Math.min(samples.length, 20)}.`);
+    } catch (error) {
+      setText("metrics-message", `Could not load metrics: ${error.message}`);
+    }
+  }
+
+  function stopLiveRefresh() {
+    if (refreshTimer !== null) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+  }
+
+  function startLiveRefresh() {
+    stopLiveRefresh();
+
+    refreshTimer = setInterval(async () => {
+      await refreshExecution();
+      await loadMetrics();
+    }, 2000);
+  }
+
+  byId("execute-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const command = byId("command-input").value.trim();
+    if (!command) {
+      setText("execution-message", "Enter a command first.");
+      return;
+    }
+
+    const button = byId("execute-btn");
+    button.disabled = true;
+    stopLiveRefresh();
+
+    setText("execution-message", "Starting command...");
+
+    try {
+      const response = await client.post(
+        `/api/sandboxes/${encodeURIComponent(sandboxId)}/execute`,
+        {
+          command,
+          async: true,
+          enable_monitoring: byId("monitoring-enabled").checked
+        }
+      );
+
+      const result = unwrap(response);
+
+      if (!result || !result.run_id) {
+        throw new Error(result?.message || "The API did not return a run ID.");
+      }
+
+      currentRunId = result.run_id;
+
+      setText("run-id", result.run_id);
+      setText("process-id", result.pid ?? "—");
+      setStatus(result.status ?? "RUNNING");
+      setText("stdout-output", "Waiting for output...");
+      setText("stderr-output", "No errors.");
+
+      setText("metric-cpu", "—");
+      setText("metric-memory", "—");
+      setText("metric-peak-memory", "—");
+      setText("metric-samples", "0");
+
+      setText("execution-message", `Command started. Run ID: ${result.run_id}`);
+
+      await refreshExecution();
+      await loadMetrics();
+      await loadHistory();
+
+      startLiveRefresh();
+    } catch (error) {
+      setText("execution-message", `Execution failed: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  byId("refresh-execution-btn").addEventListener("click", refreshExecution);
+  byId("refresh-metrics-btn").addEventListener("click", loadMetrics);
+  byId("refresh-history-btn").addEventListener("click", loadHistory);
+
+  byId("stop-execution-btn").addEventListener("click", async () => {
+    if (!currentRunId) return;
+
+    const button = byId("stop-execution-btn");
+    button.disabled = true;
+    setText("execution-message", "Stopping process...");
+
+    try {
+      await client.post(
+        `/api/executions/${encodeURIComponent(currentRunId)}/stop`,
+        { grace_period: 3 }
+      );
+
+      await refreshExecution();
+      await loadMetrics();
+      await loadHistory();
+    } catch (error) {
+      setText("execution-message", `Could not stop process: ${error.message}`);
+      button.disabled = false;
+    }
+  });
+
+  async function initialize() {
+    await loadSandbox();
+    await loadHistory();
+  }
+
+  initialize();
+})();
+</script>
 {% endblock %}

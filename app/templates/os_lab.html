@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}OS Lab - Portable Sandbox{% endblock %}
+{% block page_heading %}Operating Systems Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Operating Systems Lab</h1>
+    <p>Interactive demonstrations of operating system concepts.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>Existing Sandbox Capabilities</h2>
+  <p>Process management, filesystem management, Bubblewrap isolation,
+     and CPU/memory monitoring are provided by the existing sandbox engine.</p>
+</section>
+
+<section class="card">
+  <h2>CPU Scheduling</h2>
+  <form method="POST">
+    <input type="hidden" name="module" value="scheduling">
+    <label>Algorithm</label>
+    <select id="schedule-algorithm">
+      <option value="fcfs">FCFS</option>
+      <option value="sjf">SJF (Non-preemptive)</option>
+      <option value="round_robin">Round Robin</option>
+    </select>
+    <label>Time quantum</label>
+    <input id="quantum" type="number" value="2" min="1">
+    <label>Processes (JSON)</label>
+    <textarea name="payload" rows="6" required>{
+  "processes": [
+    {"pid":"P1","arrival":0,"burst":5},
+    {"pid":"P2","arrival":1,"burst":3},
+    {"pid":"P3","arrival":2,"burst":1}
+  ]
+}</textarea>
+    <button class="btn btn-primary" type="submit"
+      onclick="this.form.payload.value=JSON.stringify({...JSON.parse(this.form.payload.value),algorithm:document.getElementById('schedule-algorithm').value,quantum:Number(document.getElementById('quantum').value)})">
+      Run Scheduling
+    </button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Memory Management</h2>
+  <form method="POST">
+    <input type="hidden" name="module" value="memory">
+    <label>Strategy</label>
+    <select id="memory-strategy">
+      <option value="first_fit">First Fit</option>
+      <option value="best_fit">Best Fit</option>
+      <option value="worst_fit">Worst Fit</option>
+    </select>
+    <label>Blocks and process sizes (JSON)</label>
+    <textarea name="payload" rows="5" required>{
+  "blocks":[100,500,200,300,600],
+  "processes":[212,417,112,426]
+}</textarea>
+    <button class="btn btn-primary" type="submit"
+      onclick="this.form.payload.value=JSON.stringify({...JSON.parse(this.form.payload.value),strategy:document.getElementById('memory-strategy').value})">
+      Run Memory Allocation
+    </button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Deadlock Management - Banker's Algorithm</h2>
+  <form method="POST">
+    <input type="hidden" name="module" value="deadlock">
+    <label>Resource allocation data (JSON)</label>
+    <textarea name="payload" rows="9" required>{
+  "available":[3,3,2],
+  "allocation":[[0,1,0],[2,0,0],[3,0,2],[2,1,1],[0,0,2]],
+  "maximum":[[7,5,3],[3,2,2],[9,0,2],[2,2,2],[4,3,3]]
+}</textarea>
+    <button class="btn btn-primary" type="submit">Check Safe State</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Process Synchronization - Producer Consumer</h2>
+  <form method="POST">
+    <input type="hidden" name="module" value="synchronization">
+    <label>Buffer configuration (JSON)</label>
+    <textarea name="payload" rows="4" required>{
+  "capacity":3,
+  "items":[1,2,3,4,5]
+}</textarea>
+    <button class="btn btn-primary" type="submit">Run Synchronization</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Inter-Process Communication - Pipe</h2>
+  <form method="POST">
+    <input type="hidden" name="module" value="ipc">
+    <label>Message (JSON)</label>
+    <textarea name="payload" rows="3" required>{
+  "message":"Hello from Parent Process!"
+}</textarea>
+    <button class="btn btn-primary" type="submit">Run IPC</button>
+  </form>
+</section>
+
+{% if error %}
+<section class="card">
+  <h2>Execution Error</h2>
+  <pre>{{ error }}</pre>
+</section>
+{% endif %}
+
+{% if result is not none %}
+<section class="card">
+  <h2>Execution Result</h2>
+  <pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ result | tojson(indent=2) }}</pre>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+{% block page_title %}Environment Settings{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 800px;">
+  <div class="card-header">
+    <div class="card-title">Environment Information</div>
+  </div>
+  <table class="data-table">
+    <tbody>
+      <tr>
+        <td style="font-weight: 600; width: 200px;">Host Platform</td>
+        <td>WSL2 (Ubuntu Linux)</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Framework</td>
+        <td>Flask (Python 3.14)</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Storage Engine</td>
+        <td>SQLite 3 (Normalized DBMS)</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Process Supervisor</td>
+        <td>POSIX Process Groups (setsid, SIGTERM, SIGKILL)</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Resource Monitor</td>
+        <td>psutil (/proc CPU &amp; Memory Telemetry)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -198,6 +198,18 @@
           <span>Process Monitor</span>
         </a>
 
+        <a href="{{ url_for('web.os_lab_page') }}"
+          class="nav-link {% if request.endpoint == 'web.os_lab_page' %}active{% endif %}">
+          <span class="nav-icon">O</span>
+          <span>OS Lab</span>
+        </a>
+
+        <a href="{{ url_for('web.dbms_lab_page') }}"
+          class="nav-link {% if request.endpoint == 'web.dbms_lab_page' %}active{% endif %}">
+          <span class="nav-icon">D</span>
+          <span>DBMS Lab</span>
+        </a>
+
         <a href="{{ url_for('web.activity_page') }}"
           class="nav-link {% if request.endpoint == 'web.activity_page' %}active{% endif %}">
           <span class="nav-icon">L</span>
