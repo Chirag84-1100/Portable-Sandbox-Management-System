@@ -106,11 +106,11 @@ def demonstrate_resource_telemetry(
     3. Computes aggregate analytics (peak CPU %, average RSS).
     """
     workload = (
-        "import time\n"
-        "data = [bytearray(1024 * 1024) for _ in range(5)]\n"
-        "for _ in range(5):\n"
-        "    sum(i * i for i in range(100000))\n"
-        "    time.sleep(0.08)\n"
+    "import time\n"
+    "data = [bytearray(1024 * 1024) for _ in range(10)]\n"
+    "for _ in range(30):\n"
+    "    sum(i * i for i in range(200000))\n"
+    "    time.sleep(0.1)\n"
     )
 
     run_id, proc = spawn_process(
